@@ -35,7 +35,13 @@ REPO_ROOT = FUZZ_DIR.parent
 SPEC = REPO_ROOT / "conformance" / "cases" / "spec" / "spec.json"
 FIXTURES = REPO_ROOT / "conformance" / "fixtures"
 
-TARGETS = ("parse_pipeline", "ecies_decrypt", "upsert_roundtrip")
+TARGETS = (
+    "crypto_v3_decrypt",
+    "ecies_decrypt",
+    "parse_pipeline",
+    "sockeye_decode",
+    "upsert_roundtrip",
+)
 
 UPSERT_PLACEHOLDER = b"\x00ENVRYPT_UPSERT_0\x00"
 UTF16LE_BOM = b"\xff\xfe"
@@ -90,7 +96,8 @@ def main(argv: list[str] | None = None) -> int:
         write_seed("parse_pipeline", name, data)
         write_seed("upsert_roundtrip", name, data)
 
-    # --- encrypted: values (from every fixture) -> ecies_decrypt ---
+    # --- encrypted: values (from every fixture) -> ecies_decrypt +
+    # crypto_v3_decrypt (the v3 target calls decrypt_v3 on `encrypted:` values) ---
     enc_re = re.compile(rb"encrypted:[A-Za-z0-9+/=]+")
     seen: set[bytes] = set()
     idx = 0
@@ -102,7 +109,21 @@ def main(argv: list[str] | None = None) -> int:
             # both the full `encrypted:` string and the bare base64 payload
             write_seed("ecies_decrypt", f"enc-{idx}", m)
             write_seed("ecies_decrypt", f"payload-{idx}", m[len(b"encrypted:") :])
+            write_seed("crypto_v3_decrypt", f"enc-{idx}", m)
             idx += 1
+
+    # --- locked: values (from every fixture) -> crypto_v3_decrypt (the v3 target
+    # calls unlock_v3 on `locked:<pub>:<payload>` values) ---
+    locked_re = re.compile(rb"locked:[A-Za-z0-9:+/=]+")
+    seen_locked: set[bytes] = set()
+    lidx = 0
+    for data in fixture_bytes:
+        for m in locked_re.findall(data):
+            if m in seen_locked:
+                continue
+            seen_locked.add(m)
+            write_seed("crypto_v3_decrypt", f"locked-{lidx}", m)
+            lidx += 1
 
     # --- crafted edge seeds ---
     # parse_pipeline: encodings, command sub, expansion, escapes.
@@ -155,6 +176,43 @@ def main(argv: list[str] | None = None) -> int:
     }
     for name, data in craft_ecies.items():
         write_seed("ecies_decrypt", name, data)
+
+    # crypto_v3_decrypt: consumes UTF-8-lossy strings routed to decrypt_v3 /
+    # unlock_v3 with and without the `encrypted:` / `locked:` prefixes, plus a
+    # plaintext for the recipient round-trip path.
+    craft_v3 = {
+        "craft-empty": b"",
+        "craft-encrypted-prefix": b"encrypted:",
+        "craft-locked-prefix": b"locked:",
+        "craft-tiny-encrypted": b"encrypted:AAAA",
+        "craft-plaintext": b"round-trip me",
+    }
+    for name, data in craft_v3.items():
+        write_seed("crypto_v3_decrypt", name, data)
+
+    # sockeye_decode: consumes raw bytes routed to sockeye::decode. Seed the
+    # binary record shape (EV1 header + u16-BE name/value lengths + name + value)
+    # plus header-only / truncated edges.
+    ev1_header = b"EV1\x01"
+
+    def sockeye_record(field: bytes, value: bytes) -> bytes:
+        return (
+            ev1_header
+            + len(field).to_bytes(2, "big")
+            + len(value).to_bytes(2, "big")
+            + field
+            + value
+        )
+
+    craft_sockeye = {
+        "craft-empty": b"",
+        "craft-header-only": ev1_header,
+        "craft-truncated": ev1_header + b"\x00\x04",
+        "craft-record": sockeye_record(b"ENVRYPT_SECRET", b"0" * 64),
+        "craft-record-short": sockeye_record(b"K", b"ab"),
+    }
+    for name, data in craft_sockeye.items():
+        write_seed("sockeye_decode", name, data)
 
     label = "corpus files (seeds + kept growth)" if args.additive else "seed files"
     for target in TARGETS:
