@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * @file Code-as-law for the release-version discipline: a PUBLISHABLE lib's
- *   package.json version must be a `X.Y.Z-prerelease` HINT on the dev branch —
- *   the agent NEVER hand-sets a bare release version; the publish/release
- *   script owns the bare `X.Y.Z` (it strips the `-prerelease` suffix at
- *   publish). This pairs the fleet memory "agent triggers releases via the
- *   gated publish script; the script owns the bump" with an enforcer.
- *   Enrollment: a publishable manifest — `private` is not true AND
- *   `publishConfig` is declared (the fleet's publishable-manifest marker).
+ *   package.json / Cargo.toml version must be a `X.Y.Z-prerelease` HINT on the
+ *   dev branch — the agent NEVER hand-sets a bare release version; the
+ *   publish/release script owns the bare `X.Y.Z` (it strips the `-prerelease`
+ *   suffix at publish). This pairs the fleet memory "agent triggers releases via
+ *   the gated publish script; the script owns the bump" with an enforcer.
+ *   Enrollment: a publishable manifest — for npm, `private` is not true AND
+ *   `publishConfig` is declared; for a Rust crate, the single publishable
+ *   package `cargo metadata` resolves (anything not `publish = false`).
  *   Non-publishable repos (apps, tools, the wheelhouse itself) no-op. PASS
  *   when: not enrolled; OR the version carries a prerelease/build suffix (the
  *   hint); OR the version is bare BUT HEAD is the release-bump commit (`chore:
@@ -19,7 +20,7 @@
  *   scripts/fleet/check/publishable-version-is-prerelease-hint.mts [--quiet]
  */
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -27,6 +28,7 @@ import { getDefaultLogger } from '@socketsecurity/lib-stable/logger/default'
 import { spawnSync } from '@socketsecurity/lib-stable/process/spawn/child'
 
 import { REPO_ROOT } from '../paths.mts'
+import { readCargoPackage } from '../publish-infra/cargo/shared.mts'
 import { isMainModule } from '../_shared/is-main-module.mts'
 
 const logger = getDefaultLogger()
@@ -105,30 +107,10 @@ function readHeadSubject(repoRoot: string): string | undefined {
   return r.status === 0 && out ? out : undefined
 }
 
-function main(): void {
-  const quiet = process.argv.includes('--quiet')
-  let pkg: { private?: unknown; publishConfig?: unknown; version?: unknown }
-  try {
-    pkg = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))
-  } catch {
-    // No/unreadable package.json — nothing publishable to check.
-    return
-  }
-  const version = typeof pkg.version === 'string' ? pkg.version : ''
-  if (!version) {
-    return
-  }
-  const result = evaluateVersionHint({
-    hasPublishConfig: Boolean(pkg.publishConfig),
-    headSubject: readHeadSubject(REPO_ROOT),
-    isPrivate: pkg.private === true,
-    version,
-  })
+function report(result: VersionHintResult, quiet: boolean): void {
   if (result.ok) {
     if (!quiet) {
-      logger.success(
-        `[publishable-version-is-prerelease-hint] ${result.reason}`,
-      )
+      logger.success(`[publishable-version-is-prerelease-hint] ${result.reason}`)
     }
     return
   }
@@ -140,6 +122,69 @@ function main(): void {
   process.exitCode = 1
 }
 
+function checkNpm(quiet: boolean): void {
+  let pkg: { private?: unknown; publishConfig?: unknown; version?: unknown }
+  try {
+    pkg = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))
+  } catch {
+    // No/unreadable package.json — nothing publishable to check.
+    return
+  }
+  const version = typeof pkg.version === 'string' ? pkg.version : ''
+  if (!version) {
+    return
+  }
+  report(
+    evaluateVersionHint({
+      hasPublishConfig: Boolean(pkg.publishConfig),
+      headSubject: readHeadSubject(REPO_ROOT),
+      isPrivate: pkg.private === true,
+      version,
+    }),
+    quiet,
+  )
+}
+
+/**
+ * The crates.io twin: a publishable crate's Cargo.toml version must carry the
+ * `X.Y.Z-prerelease` hint on the dev branch (or sit on the release-bump commit).
+ * `readCargoPackage` returns only a publishable crate — resolving
+ * `[workspace.package]` inheritance via `cargo metadata` — so its success IS the
+ * publishable marker, mapped to `hasPublishConfig: true`. Skips when there is no
+ * Cargo.toml, no cargo toolchain, no publishable package, or an ambiguous
+ * multi-crate workspace (the release path disambiguates with `--package`).
+ */
+async function checkCargo(quiet: boolean): Promise<void> {
+  if (!existsSync(path.join(REPO_ROOT, 'Cargo.toml'))) {
+    return
+  }
+  let version: string
+  try {
+    ;({ version } = await readCargoPackage())
+  } catch {
+    return
+  }
+  report(
+    evaluateVersionHint({
+      hasPublishConfig: true,
+      headSubject: readHeadSubject(REPO_ROOT),
+      isPrivate: false,
+      version,
+    }),
+    quiet,
+  )
+}
+
+async function main(): Promise<void> {
+  const quiet = process.argv.includes('--quiet')
+  checkNpm(quiet)
+  await checkCargo(quiet)
+}
+
 if (isMainModule(import.meta.url)) {
-  main()
+  main().catch((e: unknown) => {
+    // Log an unexpected crash but preserve any exit code a check already set —
+    // never erase a real violation, never red-CI on a tooling hiccup.
+    logger.error(e)
+  })
 }
