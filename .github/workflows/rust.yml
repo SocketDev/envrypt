@@ -1,0 +1,284 @@
+# envrypt CI. The project is a single publishable **library** crate (`envrypt`) — no
+# CLI, no binary, no packaging. This workflow gates fmt/clippy, the workspace test
+# suite (+ doctests + examples), the self-contained conformance corpus (checked-in
+# spec cases and frozen crypto/interop vectors), and the positive-allowlist
+# dependency budget.
+name: rust
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'conformance/**'
+      - 'rustfmt.toml'
+      - 'clippy.toml'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'conformance/**'
+      - 'rustfmt.toml'
+      - 'clippy.toml'
+      - '.github/workflows/rust.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Fast gate: format, lint (warnings are errors), the full test suite, doctests,
+  # examples, and a bench build-check.
+  test:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy (all targets, all features, deny warnings)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      # Network-off unit tests (#68): run the test binaries inside a network
+      # namespace with only loopback up, so any real outbound call fails while
+      # localhost fixture servers still work — the compiled-language equivalent
+      # of the JS/TS `nock.disableNetConnect()` gate. Deps are pre-fetched online
+      # first; the sandbox only wraps the test *run*. Fail-closed: if no namespace
+      # can be created the job errors, never silently runs tests with the network
+      # up. See docs/agents.md/fleet/no-live-network-in-tests.md.
+      - name: prepare + verify network-off sandbox
+        run: |
+          set -euo pipefail
+          # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor;
+          # relax it on this ephemeral runner (passwordless sudo is present).
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 >/dev/null 2>&1 || true
+          fi
+          if ! unshare --map-root-user --net true 2>/dev/null; then
+            echo "::error::network-off: unprivileged net namespace unavailable on this runner; refusing to run tests with the network up." >&2
+            exit 1
+          fi
+          cat > "${RUNNER_TEMP}/run-offline.sh" <<'OFFLINE'
+          #!/usr/bin/env bash
+          # Run "$@" with external network disabled — fresh net namespace, loopback
+          # only. Loopback is up so localhost fixture servers work; there is no
+          # route off-box, so any real outbound call fails.
+          set -euo pipefail
+          exec unshare --map-root-user --net -- \
+            bash -c 'ip link set lo up 2>/dev/null || true; exec "$@"' _ "$@"
+          OFFLINE
+          chmod +x "${RUNNER_TEMP}/run-offline.sh"
+          # Prove the sandbox actually blocks egress before trusting it: a reach
+          # to a public host MUST fail inside the namespace.
+          if "${RUNNER_TEMP}/run-offline.sh" timeout 5 curl -sS -o /dev/null https://example.com 2>/dev/null; then
+            echo "::error::network-off self-check: reached example.com inside the sandbox — egress is NOT blocked." >&2
+            exit 1
+          fi
+          echo "network-off: verified — egress blocked, loopback available."
+      - name: pre-fetch deps (online, before the sandbox)
+        run: cargo fetch --locked
+      - name: test (workspace, all features — network-off)
+        run: '"${RUNNER_TEMP}/run-offline.sh" cargo test --workspace --all-features --offline'
+      - name: doctests (network-off)
+        run: '"${RUNNER_TEMP}/run-offline.sh" cargo test --doc -p envrypt --offline'
+      - name: examples build
+        run: cargo build --examples -p envrypt
+      - name: bench build (cargo bench --no-run, default features)
+        run: cargo bench --no-run -p envrypt
+
+  # Cross-platform compile gate: the envrypt LIBRARY must build on Windows. Every
+  # unix-only path — sockeye pipe IPC (fork/pipe/from_raw_fd), fsio permission
+  # bits, the unix keychain backends, and unix shell exec — is cfg(unix)-gated
+  # with a cfg(windows)/cfg(not(unix)) counterpart. This job keeps that gating
+  # honest: a newly-added ungated unix API fails the Windows build here instead of
+  # shipping a crate that only compiles on unix. Compile-only (no test run — the
+  # sockeye test harness uses raw unix syscalls under #[cfg(test)]).
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: cargo check (envrypt library, all features, windows-msvc)
+        run: cargo check -p envrypt --all-features
+
+  # Library-level parse conformance: the tier-1 spec corpus (88 spec cases) + the
+  # case-28 encoding slice, asserted through envrypt's parse pipeline. The corpus is
+  # fully checked in and self-contained; frozen crypto/interop vector checks run in
+  # the `test` job's `cargo test --workspace` (crates/envrypt/tests).
+  conformance:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: tier-1 spec + case-28 parse conformance (no binary)
+        run: cargo test -p envrypt-conformance
+
+  # Dependency-budget gate for the `envrypt` library default features, run as a
+  # POSITIVE ALLOWLIST: `cargo tree -e normal` must contain ONLY the audited
+  # pure-Rust set, so any NEW crate (including a missed device-store dep) fails the
+  # build, not just the named banlist. The banlist stays as a secondary
+  # belt-and-suspenders assertion.
+  deps:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: positive allowlist — envrypt default-features tree is the audited set only
+        run: |
+          set -euo pipefail
+          # The audited pure-Rust dependency set (linux/default features). ADD a crate
+          # here only after auditing it (no HTTP/async/openssl/CLI machinery).
+          # v3 value-format crypto (docs/envrypt/CRYPTO-V3.md) adds: argon2 (+blake2,
+          # Argon2id KDF), chacha20poly1305 (+chacha20/poly1305, XChaCha20 AEAD),
+          # x25519-dalek (+curve25519-dalek and its derive), and the zeroize derive
+          # closure (zeroize_derive → proc-macro2/quote/syn/unicode-ident, compile-time
+          # proc-macros for secret zeroization) — all RustCrypto/dalek, pure Rust.
+          cat > /tmp/allow.txt <<'EOF'
+          aead
+          aes
+          aes-gcm
+          aho-corasick
+          argon2
+          base16ct
+          base64ct
+          bit-set
+          bit-vec
+          blake2
+          block-buffer
+          bstr
+          cfg-if
+          chacha20
+          chacha20poly1305
+          cipher
+          const-oid
+          cpufeatures
+          crossbeam-deque
+          crossbeam-epoch
+          crossbeam-utils
+          crypto-bigint
+          crypto-common
+          ctr
+          curve25519-dalek
+          curve25519-dalek-derive
+          der
+          digest
+          elliptic-curve
+          envrypt
+          equivalent
+          fancy-regex
+          ff
+          generic-array
+          getrandom
+          ghash
+          globset
+          group
+          hashbrown
+          hkdf
+          hmac
+          ignore
+          indexmap
+          inout
+          itoa
+          k256
+          libc
+          log
+          memchr
+          opaque-debug
+          password-hash
+          pbkdf2
+          poly1305
+          polyval
+          proc-macro2
+          quote
+          rand_core
+          regex
+          regex-automata
+          regex-syntax
+          salsa20
+          same-file
+          scrypt
+          sec1
+          serde_core
+          serde_json
+          sha2
+          subtle
+          syn
+          typenum
+          unicode-ident
+          universal-hash
+          walkdir
+          x25519-dalek
+          zeroize
+          zeroize_derive
+          zmij
+          EOF
+          # The heredoc preserves the YAML indentation, so trim to bare crate names.
+          awk 'NF{print $1}' /tmp/allow.txt | sort -u > /tmp/allow.sorted && mv /tmp/allow.sorted /tmp/allow.txt
+          cargo tree -e normal -p envrypt --prefix none \
+            | awk '{print $1}' | grep -vE '^$' | sort -u > /tmp/tree.txt
+          echo "=== envrypt -e normal tree ==="; cat /tmp/tree.txt
+          extra=$(comm -23 /tmp/tree.txt /tmp/allow.txt || true)
+          if [ -n "$extra" ]; then
+            echo "::error::envrypt pulled crate(s) not on the audited allowlist:"
+            echo "$extra"
+            echo "audit the crate, then add it to the allowlist in .github/workflows/rust.yml"
+            exit 1
+          fi
+          echo "OK — every envrypt dependency is on the audited allowlist"
+      - name: banlist (secondary) — no CLI/HTTP/async/device-store crates
+        run: |
+          set -euo pipefail
+          tree=$(cargo tree -e normal -p envrypt)
+          # openssl-sys/tokio/reqwest/hyper (HTTP/async); clap/signal-hook/nix/portable-pty
+          # (CLI); cbc (the dropped device-store cipher). aes/cipher/pbkdf2 remain as
+          # audited TRANSITIVE deps of aes-gcm/scrypt, so they are NOT banned by name.
+          if echo "$tree" | grep -Eiq '(^|[^-])openssl-sys|(^|[^-])tokio |reqwest|hyper |(^|[^-])clap |signal-hook|(^|[^-])nix |portable-pty|(^|[^-])cbc '; then
+            echo "::error::envrypt pulled a banned CLI/HTTP/async/device-store crate"
+            echo "$tree" | grep -Ei 'openssl-sys|tokio|reqwest|hyper|clap|signal-hook|nix|portable-pty|cbc'
+            exit 1
+          fi
+          echo "no banned crates in the envrypt default-features tree"
+      - name: no openssl-sys anywhere (incl. dev/build deps)
+        run: |
+          full=$(cargo tree --workspace --all-features -e normal,build,dev)
+          if echo "$full" | grep -iq 'openssl-sys'; then
+            echo "::error::openssl-sys present in the dependency graph (pure-Rust crypto only)"
+            echo "$full" | grep -i 'openssl'
+            exit 1
+          fi
+          echo "no openssl-sys in the workspace graph"

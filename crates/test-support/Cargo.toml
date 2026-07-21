@@ -1,0 +1,20 @@
+[package]
+name = "test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Dev-only test helpers for the envrypt workspace. Never published; consumed as a dev-dependency only."
+
+[dependencies]
+tempfile = { workspace = true }
+
+# v1 `locked:` WRITER helper (`lock_value_v1`): fresh v1 interop vectors are
+# produced in-repo, matching docs/envrypt/crypto-formats.md §2 byte-for-byte
+# (scrypt N=2^14/r=8/p=1, AES-256-GCM 12-byte IV, version 0x01, tag stored
+# BEFORE the ciphertext, base64url without padding). Dev-only: this crate never
+# enters a shipped `-e normal` tree.
+aes-gcm = { workspace = true }
+scrypt = { workspace = true }
+rand_core = { workspace = true }

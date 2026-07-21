@@ -1,0 +1,3 @@
+# https://github.com/bkeepers/dotenv/pull/526
+PARENTHESES='passwo(rd'
+PARENTHESES_EXPAND="$(echo "$PARENTHESES")"

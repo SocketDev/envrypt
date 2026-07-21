@@ -1,0 +1,39 @@
+# Directed expansion cases: the `${VAR:-default}` (truthy check) vs `${VAR-default}`
+# (set check) distinction, INCLUDING empty-string values. The randomized parser
+# differential's token pool cannot generate this distinction, so this corpus pins
+# it explicitly.
+
+- name: expand-colon-dash-vs-dash-empty-string
+  tap: 'tests/lib/config-expand.test.js (:- vs - with SET-BUT-EMPTY value)'
+  files:
+    .env: "SET_EMPTY=\nA=${SET_EMPTY:-fallbackA}\nB=${SET_EMPTY-fallbackB}\nC=${UNDEF:-fallbackC}\nD=${UNDEF-fallbackD}\nE=${UNDEF-}\nF=${SET_EMPTY:-}\n"
+  argv: [get]
+  expect:
+    exit: 0
+    # :- falls back on empty (A) — bare - does NOT (B, the var IS set);
+    # both fall back on undefined (C, D); empty defaults stay empty (E, F).
+    stdout: "{\"SET_EMPTY\":\"\",\"A\":\"fallbackA\",\"B\":\"\",\"C\":\"fallbackC\",\"D\":\"fallbackD\",\"E\":\"\",\"F\":\"\"}\n"
+    stderr: ''
+
+- name: expand-colon-dash-vs-dash-machine-env-empty
+  tap: 'tests/lib/config-expand.test.js machine-env variant (empty-string PROCESS env value)'
+  files:
+    .env: "A=${SET_EMPTY:-fallbackA}\nB=${SET_EMPTY-fallbackB}\n"
+  env:
+    SET_EMPTY: ''
+  argv: [get]
+  expect:
+    exit: 0
+    stdout: "{\"A\":\"fallbackA\",\"B\":\"\"}\n"
+    stderr: ''
+
+- name: expand-colon-dash-vs-dash-through-run
+  tap: 'tests/e2e/run.test.js expansion shape × the :-/- distinction (directed)'
+  files:
+    .env: "SET_EMPTY=\nX=${SET_EMPTY:-colon}\nY=${SET_EMPTY-dash}\n"
+    index.js: "console.log(JSON.stringify([process.env.X, process.env.Y]))\n"
+  argv: [run, --quiet, --, node, index.js]
+  expect:
+    exit: 0
+    stdout: "[\"colon\",\"\"]\n"
+    stderr: ''

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "case28_UTF16LE",
+    "input": "HELLO=\"utf16le\"",
+    "expected": {
+      "HELLO": "utf16le"
+    },
+    "encoding": "utf16le",
+    "notes": "UTF-16LE encoding case (tests/lib/helpers/detectEncoding.test.js:6-27; tests/e2e semantics: copy tests/.env.utf16le as .env, get HELLO -> utf16le). The utf16le writer output is byte-identical to conformance/fixtures/root/.env.utf16le (FF FE BOM + UTF-16LE units) — asserted by runner/tests/parser_conformance.rs."
+  },
+  {
+    "id": "case28_LATIN1",
+    "input": "HELLO=\"latin1\"",
+    "expected": {
+      "HELLO": "latin1"
+    },
+    "encoding": "latin1",
+    "notes": "latin1 encoding case: detectEncoding never detects latin1, so the file reads as utf8; content is ASCII-only so the map is intact. Byte-identical to conformance/fixtures/root/.env.latin1."
+  }
+]

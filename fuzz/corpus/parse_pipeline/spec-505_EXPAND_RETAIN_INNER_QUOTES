@@ -1,0 +1,4 @@
+# https://github.com/bkeepers/dotenv/issues/530
+# Command substitution double-quote expansion
+RETAIN_INNER_QUOTES={"foo": "bar"}
+RETAIN_INNER_QUOTES_EXPAND="$(echo "$RETAIN_INNER_QUOTES")"

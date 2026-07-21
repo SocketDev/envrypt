@@ -1,0 +1,2 @@
+DOTENV_PUBLIC_KEY=abc
+S="encrypted:${X}"

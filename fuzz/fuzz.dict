@@ -1,0 +1,29 @@
+# libFuzzer dictionary for the envrypt fuzz targets (WP-21, doc 11 §7.3).
+# Passed via `-dict=fuzz.dict`. Tokens are the load-bearing byte sequences of the
+# .env grammar, the ECIES wire format, the key-naming conventions, and the upsert
+# placeholder — steering the mutator toward structurally interesting inputs.
+
+# --- .env grammar / value pipeline ---
+prefix="encrypted:"
+export="export "
+expand_open="${"
+cmdsub_open="$("
+escaped_dollar="\\$"
+single_quote="'"
+double_quote="\""
+backtick="`"
+crlf="\x0d\x0a"
+comment="# "
+default_op=":-"
+setcheck_op="-"
+
+# --- key-naming conventions (keyring / publickeys) ---
+pubkey="DOTENV_PUBLIC_KEY"
+privkey="DOTENV_PRIVATE_KEY"
+
+# --- encodings ---
+utf16le_bom="\xff\xfe"
+utf8_bom="\xef\xbb\xbf"
+
+# --- upsert placeholder-collision seed (doc 11 §7.2 target 3) ---
+upsert_placeholder="\x00ENVRYPT_UPSERT_0\x00"
