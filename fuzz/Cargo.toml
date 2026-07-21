@@ -67,3 +67,10 @@ path = "fuzz_targets/sockeye_decode.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "crypto_v3_decrypt"
+path = "fuzz_targets/crypto_v3_decrypt.rs"
+test = false
+doc = false
+bench = false

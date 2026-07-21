@@ -1624,4 +1624,60 @@ mod tests {
       assert_eq!(odd.primitive_message(), "[not a code] hello");
     }
   }
+
+  // -- property tests (proptest) ---------------------------------------------
+  //
+  // The v1 ECIES read path is an untrusted-input boundary (`encrypted:` values
+  // from a .env file) fuzzed by `ecies_decrypt`. These express the same contract
+  // as shrinking properties: the Node-parity codecs are total and round-trip,
+  // and `decrypt` never panics on arbitrary input against a fixed key.
+  mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn arb_string() -> impl Strategy<Value = String> {
+      proptest::collection::vec(any::<char>(), 0..256).prop_map(|v| v.into_iter().collect())
+    }
+
+    proptest! {
+      /// The standard-padded encoder round-trips through Node's lenient decoder:
+      /// `node_base64_decode(base64_encode(x)) == x`.
+      #[test]
+      fn base64_round_trips(bytes in proptest::collection::vec(any::<u8>(), 0..512)) {
+        prop_assert_eq!(node_base64_decode(&base64_encode(&bytes)), bytes);
+      }
+
+      /// `node_base64_decode` is total on arbitrary strings (lenient: skips
+      /// junk, stops at `=`), never a panic.
+      #[test]
+      fn node_base64_decode_never_panics(s in arb_string()) {
+        let _ = node_base64_decode(&s);
+      }
+
+      /// `node_hex_decode` and `strict_hex_decode` are total on arbitrary input.
+      #[test]
+      fn hex_decoders_never_panic(s in arb_string()) {
+        let _ = node_hex_decode(&s);
+        let _ = strict_hex_decode(&s);
+      }
+
+      /// `decrypt` never panics on an arbitrary `encrypted:`-framed value against
+      /// the fixed golden key — every malformed payload is a coded `Err`.
+      #[test]
+      fn decrypt_never_panics(s in arb_string()) {
+        let _ = decrypt(PRIVATE_KEY, &s, true);
+        let _ = decrypt(PRIVATE_KEY, &format!("{ENCRYPTED_PREFIX}{s}"), true);
+        let _ = decrypt_key_value("KEY", &s, "ENVRYPT_PRIVATE_KEY", Some(PRIVATE_KEY));
+      }
+
+      /// ECIES round-trip identity: `decrypt(encrypt(pt)) == pt` for arbitrary
+      /// UTF-8 plaintext against a freshly generated keypair.
+      #[test]
+      fn ecies_round_trip_is_identity(plaintext in arb_string()) {
+        let kp = keypair();
+        let value = encrypt(&kp.public_key, &plaintext, true).expect("encrypt");
+        prop_assert_eq!(decrypt(&kp.private_key, &value, true), Ok(plaintext));
+      }
+    }
+  }
 }

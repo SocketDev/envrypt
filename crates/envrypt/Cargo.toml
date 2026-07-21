@@ -59,6 +59,13 @@ argon2 = { workspace = true }
 hkdf = { version = "0.12", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 rand_core = { workspace = true }
+# Tier-1 property tests (`#[cfg(test)] mod tests` next to the parsers/decoders):
+# never-panic on arbitrary input, decode(encode(x)) == x round-trips, and
+# recipient round-trip identity. proptest's explicit `Strategy` objects give
+# better shrinking than quickcheck. Dev-only — never in the shipped `-e normal`
+# tree. `default-features = false` drops the `fork`/`timeout` (rusty-fork) and
+# regex machinery this suite does not use, keeping the dev tree lean.
+proptest = { version = "1", default-features = false, features = ["std"] }
 
 [dependencies]
 # `encrypted:` v1 crypto (docs/envrypt/crypto-formats.md §1.3): manual ECIES

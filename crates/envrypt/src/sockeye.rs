@@ -245,4 +245,43 @@ mod tests {
     assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
     assert_eq!(std::process::ExitStatus::from_raw(status).code(), Some(0));
   }
+
+  // -- property tests (proptest) ---------------------------------------------
+  //
+  // `decode` is the wire-record parser an untrusted parent process controls,
+  // fuzzed by `sockeye_decode`. These express the same fail-closed / round-trip
+  // contract as shrinking properties.
+  mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// The 16 lowercase hex digits, indexed by a fuzz nibble (matches the
+    /// `sockeye_decode` fuzz target's value construction).
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    proptest! {
+      /// `decode` never panics on arbitrary bytes — a malformed record is always
+      /// a graceful `Err`.
+      #[test]
+      fn decode_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..512)) {
+        let _ = decode(Cursor::new(bytes));
+      }
+
+      /// A well-formed record built from arbitrary nibbles round-trips: `decode`
+      /// returns exactly its 64-hex key.
+      #[test]
+      fn well_formed_record_round_trips(nibbles in proptest::collection::vec(0u8..16, 64)) {
+        let value: Vec<u8> = nibbles.iter().map(|&n| HEX[usize::from(n)]).collect();
+        let name = CREDENTIAL_NAME.as_bytes();
+        let mut record = Vec::new();
+        record.extend_from_slice(&HEADER);
+        record.extend_from_slice(&(name.len() as u16).to_be_bytes());
+        record.extend_from_slice(&(value.len() as u16).to_be_bytes());
+        record.extend_from_slice(name);
+        record.extend_from_slice(&value);
+        let decoded = decode(Cursor::new(record)).expect("well-formed record must decode");
+        prop_assert_eq!(decoded.as_bytes(), &value[..]);
+      }
+    }
+  }
 }

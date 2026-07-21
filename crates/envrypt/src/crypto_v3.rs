@@ -123,6 +123,16 @@ fn parse_key_hex(key_hex: &str) -> Result<[u8; 32], V3Error> {
   bytes.try_into().map_err(|_| V3Error)
 }
 
+/// Fuzz seam: derive the recipient public-key hex from a private-key hex so the
+/// `crypto_v3_decrypt` target can build a matched keypair from a FIXED private
+/// key (no RNG, deterministic corpus replay) for its round-trip lane. Compiled
+/// only under cargo-fuzz's `--cfg fuzzing`; production never sees this symbol.
+#[cfg(fuzzing)]
+pub fn fuzz_public_key_hex(private_key_hex: &str) -> Option<String> {
+  let secret = StaticSecret::from(parse_key_hex(private_key_hex).ok()?);
+  Some(hex_encode(X25519Public::from(&secret).as_bytes()))
+}
+
 // ---------------------------------------------------------------------------
 // Argon2id parameters
 // ---------------------------------------------------------------------------
@@ -976,5 +986,96 @@ mod tests {
     // A payload that is anything else routes to the v1 reader.
     assert_eq!(unlock_entry("locked:abcd:AAAA", "pw", "KEYNAME"), None);
     assert_eq!(unlock_entry("junk", "pw", "KEYNAME"), None);
+  }
+
+  // -- property tests (proptest) ---------------------------------------------
+  //
+  // The v3 reader is an untrusted-input boundary (`encrypted:`/`locked:` values
+  // from a .env file). These mirror the `crypto_v3_decrypt` fuzz target's
+  // contract as shrinking properties: the codec round-trips, and every decode
+  // entry point is total (never panics) on arbitrary input.
+  mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// An arbitrary `String` built from arbitrary chars (no regex-feature
+    /// dependency), covering the malformed base64url / header surface.
+    fn arb_string() -> impl Strategy<Value = String> {
+      proptest::collection::vec(any::<char>(), 0..256).prop_map(|v| v.into_iter().collect())
+    }
+
+    proptest! {
+      /// `base64url_decode(base64url_encode(x)) == x` for every byte vector,
+      /// covering all four remainder lengths.
+      #[test]
+      fn base64url_round_trips(bytes in proptest::collection::vec(any::<u8>(), 0..512)) {
+        prop_assert_eq!(base64url_decode(&base64url_encode(&bytes)), Some(bytes));
+      }
+
+      /// `base64url_decode` is total on arbitrary strings — a malformed value is
+      /// `None`, never a panic.
+      #[test]
+      fn base64url_decode_never_panics(s in arb_string()) {
+        let _ = base64url_decode(&s);
+      }
+
+      /// `hex_decode(hex_encode(x)) == x`.
+      #[test]
+      fn hex_round_trips(bytes in proptest::collection::vec(any::<u8>(), 0..256)) {
+        prop_assert_eq!(hex_decode(&hex_encode(&bytes)), Some(bytes));
+      }
+
+      /// `hex_decode` is total on arbitrary strings.
+      #[test]
+      fn hex_decode_never_panics(s in arb_string()) {
+        let _ = hex_decode(&s);
+      }
+
+      /// `first_payload_byte` is total on arbitrary strings.
+      #[test]
+      fn first_payload_byte_never_panics(s in arb_string()) {
+        let _ = first_payload_byte(&s);
+      }
+
+      /// Every v3 decode entry point is total on arbitrary strings against a
+      /// fixed private key — malformed input yields the opaque error, never a
+      /// panic. `unlock` inputs are framed both bare and as `locked:<pub>:<b64>`
+      /// so the passphrase branch is reached; the authenticated Argon2 param cap
+      /// bounds the KDF work on any header that happens to parse.
+      #[test]
+      fn v3_decode_entry_points_are_total(s in arb_string()) {
+        const PRIV: &str =
+          "0202020202020202020202020202020202020202020202020202020202020202";
+        // The public hex in a `locked:` frame is echoed, not parsed by the
+        // reader, so any 64-hex filler exercises the passphrase branch.
+        let pubk = "ab".repeat(32);
+        let name = "VAR";
+        let _ = decrypt_v3(PRIV, &s, name);
+        let _ = decrypt_v3(PRIV, &format!("encrypted:{s}"), name);
+        let _ = unlock_v3(&s, "pw", name);
+        let _ = unlock_v3(&format!("locked:{pubk}:{s}"), "pw", name);
+        let _ = decrypt_entry(PRIV, &s, name);
+        let _ = unlock_entry(&s, "pw", name);
+      }
+
+      /// Recipient round-trip identity: `decrypt_v3(encrypt_v3(pt)) == pt` for
+      /// arbitrary UTF-8 plaintext, sealed and opened under the same name.
+      #[test]
+      fn recipient_round_trip_is_identity(plaintext in arb_string(), name in arb_string()) {
+        let kp = keypair_v3();
+        let value = encrypt_v3(&kp.public_key, &plaintext, &name).expect("encrypt");
+        prop_assert_eq!(decrypt_v3(&kp.private_key, &value, &name), Ok(plaintext));
+      }
+
+      /// A value sealed for one name never opens under a different name
+      /// (relocation resistance — the name is bound into the AAD).
+      #[test]
+      fn recipient_name_binding_holds(plaintext in arb_string(), a in arb_string(), b in arb_string()) {
+        prop_assume!(a != b);
+        let kp = keypair_v3();
+        let value = encrypt_v3(&kp.public_key, &plaintext, &a).expect("encrypt");
+        prop_assert_eq!(decrypt_v3(&kp.private_key, &value, &b), Err(V3Error));
+      }
+    }
   }
 }

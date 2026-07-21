@@ -283,6 +283,48 @@ mod detect_encoding_tests {
     let dir = tempfile::tempdir().unwrap();
     assert!(detect_encoding(&dir.path().join("nope")).is_err());
   }
+
+  // -- property tests (proptest) ---------------------------------------------
+  //
+  // Byte-level encoding detection + Node-parity decode is the raw-bytes ingest
+  // boundary the `parse_pipeline` fuzz target drives. These express the total /
+  // round-trip contract as shrinking properties over arbitrary bytes.
+  mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+      /// `detect_encoding_bytes` and `decode` (all three encodings) are total on
+      /// arbitrary byte buffers — never a panic.
+      #[test]
+      fn detect_and_decode_never_panic(bytes in proptest::collection::vec(any::<u8>(), 0..1024)) {
+        let enc = detect_encoding_bytes(&bytes);
+        let _ = decode(&bytes, enc);
+        let _ = decode(&bytes, FileEncoding::Utf8);
+        let _ = decode(&bytes, FileEncoding::Latin1);
+        let _ = decode(&bytes, FileEncoding::Utf16Le);
+      }
+
+      /// latin1 decode is one char per byte and losslessly round-trips: every
+      /// decoded char is U+0000..=U+00FF and re-encoding recovers the bytes.
+      #[test]
+      fn latin1_is_one_char_per_byte(bytes in proptest::collection::vec(any::<u8>(), 0..1024)) {
+        let decoded = decode(&bytes, FileEncoding::Latin1);
+        prop_assert_eq!(decoded.chars().count(), bytes.len());
+        let round: Vec<u8> = decoded.chars().map(|c| c as u8).collect();
+        prop_assert_eq!(round, bytes);
+      }
+
+      /// utf8 decode matches Node's lossy `Buffer.toString('utf8')` oracle.
+      #[test]
+      fn utf8_decode_matches_lossy_oracle(bytes in proptest::collection::vec(any::<u8>(), 0..1024)) {
+        prop_assert_eq!(
+          decode(&bytes, FileEncoding::Utf8),
+          String::from_utf8_lossy(&bytes).into_owned()
+        );
+      }
+    }
+  }
 }
 
 #[cfg(test)]

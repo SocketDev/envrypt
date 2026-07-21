@@ -31,10 +31,11 @@ DURATION="${2:-600}"
 # See docs/envrypt/fuzzing.md.
 target_flags() {
   case "$1" in
-    parse_pipeline)   echo "-timeout=10 -rss_limit_mb=2048 -max_len=4096" ;;
-    ecies_decrypt)    echo "-timeout=10 -rss_limit_mb=2048" ;;
-    upsert_roundtrip) echo "-timeout=10 -rss_limit_mb=2048 -max_len=4096" ;;
-    sockeye_decode)   echo "-timeout=10 -rss_limit_mb=2048 -max_len=256" ;;
+    parse_pipeline)    echo "-timeout=10 -rss_limit_mb=2048 -max_len=4096" ;;
+    ecies_decrypt)     echo "-timeout=10 -rss_limit_mb=2048" ;;
+    upsert_roundtrip)  echo "-timeout=10 -rss_limit_mb=2048 -max_len=4096" ;;
+    sockeye_decode)    echo "-timeout=10 -rss_limit_mb=2048 -max_len=256" ;;
+    crypto_v3_decrypt) echo "-timeout=10 -rss_limit_mb=2048 -max_len=4096" ;;
     *) echo "unknown target: $1" >&2; return 1 ;;
   esac
 }
@@ -59,10 +60,10 @@ run_one() {
 
 case "${1:-all}" in
   all)
-    for t in parse_pipeline ecies_decrypt upsert_roundtrip sockeye_decode; do run_one "$t"; done ;;
-  parse_pipeline|ecies_decrypt|upsert_roundtrip|sockeye_decode)
+    for t in parse_pipeline ecies_decrypt upsert_roundtrip sockeye_decode crypto_v3_decrypt; do run_one "$t"; done ;;
+  parse_pipeline|ecies_decrypt|upsert_roundtrip|sockeye_decode|crypto_v3_decrypt)
     run_one "$1" ;;
   *)
-    echo "usage: $0 <parse_pipeline|ecies_decrypt|upsert_roundtrip|sockeye_decode|all> [seconds]" >&2
+    echo "usage: $0 <parse_pipeline|ecies_decrypt|upsert_roundtrip|sockeye_decode|crypto_v3_decrypt|all> [seconds]" >&2
     exit 2 ;;
 esac
