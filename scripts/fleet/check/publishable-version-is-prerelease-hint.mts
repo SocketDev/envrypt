@@ -8,10 +8,11 @@
  *   the gated publish script; the script owns the bump" with an enforcer.
  *   Enrollment: a publishable manifest — for npm, `private` is not true AND
  *   `publishConfig` is declared; for Rust, a SINGLE publishable crate (`cargo
- *   metadata`, not `publish = false`). A multi-crate cargo workspace is exempt —
- *   its crates must stay bare (inter-crate `version` path deps reject a
- *   prerelease suffix). Non-publishable repos (apps, tools, the wheelhouse) no-op.
- *   PASS
+ *   metadata`, not `publish = false`) must carry the hint. The INVERSE is
+ *   enforced for a MULTI-crate cargo workspace: every crate must stay BARE (its
+ *   inter-crate deps reference published crates.io versions; a `-prerelease`
+ *   breaks `^X.Y.Z` resolution). Non-publishable repos (apps, tools, the
+ *   wheelhouse) no-op. PASS
  *   when: not enrolled; OR the version carries a prerelease/build suffix (the
  *   hint); OR the version is bare BUT HEAD is the release-bump commit (`chore:
  *   bump version to <version>`) — the transient released state. FAIL when:
@@ -98,6 +99,30 @@ export function evaluateVersionHint(
   }
 }
 
+export interface CargoCrateVersion {
+  name: string
+  version: string
+}
+
+/**
+ * The "multi-crate workspaces stay bare" law, as a pure predicate. A cargo
+ * workspace that publishes MORE THAN ONE crate wires those crates together with
+ * inter-crate deps that reference published crates.io versions, so every crate
+ * must sit at a BARE release version — a `-prerelease` local hint on any of them
+ * breaks `^X.Y.Z` inter-crate resolution (cargo excludes prereleases from a
+ * caret range). Returns the offending crates (empty = compliant). A single-crate
+ * workspace has no inter-crate deps and uses the `-prerelease` hint instead, so
+ * it is never a violation here. Pure — the test drives it.
+ */
+export function barePolicyViolations(
+  packages: readonly CargoCrateVersion[],
+): CargoCrateVersion[] {
+  if (packages.length <= 1) {
+    return []
+  }
+  return packages.filter(p => isPrereleaseHint(p.version))
+}
+
 function readHeadSubject(repoRoot: string): string | undefined {
   const r = spawnSync('git', ['log', '-1', '--format=%s'], {
     cwd: repoRoot,
@@ -148,13 +173,13 @@ function checkNpm(quiet: boolean): void {
 }
 
 /**
- * The crates.io twin: a publishable crate's Cargo.toml version must carry the
- * `X.Y.Z-prerelease` hint on the dev branch (or sit on the release-bump commit).
- * `readCargoPackage` returns only a publishable crate — resolving
- * `[workspace.package]` inheritance via `cargo metadata` — so its success IS the
- * publishable marker, mapped to `hasPublishConfig: true`. Skips when there is no
- * Cargo.toml, no cargo toolchain, no publishable package, or an ambiguous
- * multi-crate workspace (the release path disambiguates with `--package`).
+ * The crates.io twin. A SINGLE publishable crate must carry the
+ * `X.Y.Z-prerelease` hint (or sit on the release-bump commit) — same rule as
+ * npm. A MULTI-crate workspace must instead stay BARE (barePolicyViolations):
+ * its crates publish real inter-crate deps, which a prerelease would break.
+ * Crate versions resolve via `cargo metadata` (so `[workspace.package]`
+ * inheritance is applied). Fail-OPEN (skip) when there is no Cargo.toml, no
+ * cargo toolchain, or `cargo metadata` is unreadable.
  */
 async function checkCargo(quiet: boolean): Promise<void> {
   if (!existsSync(path.join(REPO_ROOT, 'Cargo.toml'))) {
@@ -165,21 +190,31 @@ async function checkCargo(quiet: boolean): Promise<void> {
   if (!packages || packages.length === 0) {
     return
   }
-  // A multi-crate workspace can't carry the `-prerelease` suffix: crates that
-  // depend on each other through a `version = "X.Y.Z"` path requirement reject a
-  // prerelease (cargo semver), so the suffix would break resolution. The bare
-  // version is required there; the release names its bump via the commit-type
-  // heuristic / `--release-as`, not a manifest hint. Enforce the hint only for a
-  // single publishable crate — the npm-analogous case.
+  // A MULTI-crate workspace publishes real inter-crate deps to crates.io, so its
+  // crates must stay BARE — a `-prerelease` local hint on any of them breaks
+  // `^X.Y.Z` inter-crate resolution (cargo semver). Enforce bare here: the
+  // inverse of the single-crate hint requirement below.
   if (packages.length > 1) {
-    if (!quiet) {
-      logger.success(
-        `[publishable-version-is-prerelease-hint] ${packages.length} publishable ` +
-          'crates — bare versions required (inter-crate deps); hint not enforced',
-      )
+    const violations = barePolicyViolations(packages)
+    if (violations.length === 0) {
+      if (!quiet) {
+        logger.success(
+          `[publishable-version-is-prerelease-hint] ${packages.length} publishable ` +
+            'crates, all bare — multi-crate workspaces stay bare',
+        )
+      }
+      return
     }
+    logger.error(
+      '[publishable-version-is-prerelease-hint] a multi-crate workspace must stay ' +
+        `bare, but ${violations.map(p => `${p.name} ${p.version}`).join(', ')} ` +
+        'carries a prerelease — it breaks inter-crate `^X.Y.Z` resolution. Drop ' +
+        'the suffix; the release names its bump via --release-as / the heuristic.',
+    )
+    process.exitCode = 1
     return
   }
+  // A SINGLE publishable crate carries the `-prerelease` hint (npm-analogous).
   report(
     evaluateVersionHint({
       hasPublishConfig: true,
