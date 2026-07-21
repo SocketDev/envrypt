@@ -7,9 +7,11 @@
  *   suffix at publish). This pairs the fleet memory "agent triggers releases via
  *   the gated publish script; the script owns the bump" with an enforcer.
  *   Enrollment: a publishable manifest — for npm, `private` is not true AND
- *   `publishConfig` is declared; for Rust, every publishable crate `cargo
- *   metadata` resolves (anything not `publish = false`), each checked in turn.
- *   Non-publishable repos (apps, tools, the wheelhouse itself) no-op. PASS
+ *   `publishConfig` is declared; for Rust, a SINGLE publishable crate (`cargo
+ *   metadata`, not `publish = false`). A multi-crate cargo workspace is exempt —
+ *   its crates must stay bare (inter-crate `version` path deps reject a
+ *   prerelease suffix). Non-publishable repos (apps, tools, the wheelhouse) no-op.
+ *   PASS
  *   when: not enrolled; OR the version carries a prerelease/build suffix (the
  *   hint); OR the version is bare BUT HEAD is the release-bump commit (`chore:
  *   bump version to <version>`) — the transient released state. FAIL when:
@@ -160,29 +162,33 @@ async function checkCargo(quiet: boolean): Promise<void> {
   }
   // Fail-open (skip) on no cargo toolchain / unparseable metadata.
   const packages = await readPublishableCargoPackages().catch(() => undefined)
-  if (!packages) {
+  if (!packages || packages.length === 0) {
     return
   }
-  const headSubject = readHeadSubject(REPO_ROOT)
-  // The hint verdict depends only on the version string, so check each DISTINCT
-  // version once (a workspace usually shares one `[workspace.package]` version).
-  const seen = new Set<string>()
-  for (let i = 0, { length } = packages; i < length; i += 1) {
-    const { version } = packages[i]!
-    if (seen.has(version)) {
-      continue
+  // A multi-crate workspace can't carry the `-prerelease` suffix: crates that
+  // depend on each other through a `version = "X.Y.Z"` path requirement reject a
+  // prerelease (cargo semver), so the suffix would break resolution. The bare
+  // version is required there; the release names its bump via the commit-type
+  // heuristic / `--release-as`, not a manifest hint. Enforce the hint only for a
+  // single publishable crate — the npm-analogous case.
+  if (packages.length > 1) {
+    if (!quiet) {
+      logger.success(
+        `[publishable-version-is-prerelease-hint] ${packages.length} publishable ` +
+          'crates — bare versions required (inter-crate deps); hint not enforced',
+      )
     }
-    seen.add(version)
-    report(
-      evaluateVersionHint({
-        hasPublishConfig: true,
-        headSubject,
-        isPrivate: false,
-        version,
-      }),
-      quiet,
-    )
+    return
   }
+  report(
+    evaluateVersionHint({
+      hasPublishConfig: true,
+      headSubject: readHeadSubject(REPO_ROOT),
+      isPrivate: false,
+      version: packages[0]!.version,
+    }),
+    quiet,
+  )
 }
 
 async function main(): Promise<void> {
