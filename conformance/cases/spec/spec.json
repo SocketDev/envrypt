@@ -1,0 +1,726 @@
+[
+  {
+    "id": "101_BASIC",
+    "input": "BASIC=basic",
+    "expected": {
+      "BASIC": "basic"
+    }
+  },
+  {
+    "id": "102_EMPTY",
+    "input": "EMPTY=",
+    "expected": {
+      "EMPTY": ""
+    }
+  },
+  {
+    "id": "103_MACHINE",
+    "input": "MACHINE=file",
+    "expected": {
+      "MACHINE": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    },
+    "notes": "pre-existing process env MACHINE=machine wins over the file value (no overload); mirrors tests/lib/config-expand.test.js:27-34"
+  },
+  {
+    "id": "104_INLINE_COMMENT",
+    "input": "INLINE_COMMENT=inline comment # works #very #well",
+    "expected": {
+      "INLINE_COMMENT": "inline comment"
+    }
+  },
+  {
+    "id": "105_INLINE_COMMENT_NO_SPACE",
+    "input": "INLINE_COMMENT_NO_SPACE=inline comments start with a#number sign. no space required.",
+    "expected": {
+      "INLINE_COMMENT_NO_SPACE": "inline comments start with a"
+    }
+  },
+  {
+    "id": "106_AFTER_LINE",
+    "input": "# previous line intentionally left blank\nAFTER_LINE=after_line",
+    "expected": {
+      "AFTER_LINE": "after_line"
+    }
+  },
+  {
+    "id": "107_EXPORT",
+    "input": "#!/usr/bin/env bash\nexport KEY=value",
+    "expected": {
+      "KEY": "value"
+    }
+  },
+  {
+    "id": "108_USERNAME",
+    "input": "USERNAME=therealnerdybeast@example.tld",
+    "expected": {
+      "USERNAME": "therealnerdybeast@example.tld"
+    },
+    "notes": "value reconstructed: the spec page's HTML extraction garbles emails/URIs via Cloudflare email-obfuscation ('[email protected]'); real value cross-checked against tests fixtures; tests/.env:37"
+  },
+  {
+    "id": "109_SPACED_KEY",
+    "input": "    SPACED_KEY = parsed",
+    "expected": {
+      "SPACED_KEY": "parsed"
+    }
+  },
+  {
+    "id": "110_TRIM_SPACE",
+    "input": "TRIM_SPACE=    some spaced out string",
+    "expected": {
+      "TRIM_SPACE": "some spaced out string"
+    }
+  },
+  {
+    "id": "111_EQUAL_SIGNS",
+    "input": "EQUAL_SIGNS=equals==",
+    "expected": {
+      "EQUAL_SIGNS": "equals=="
+    }
+  },
+  {
+    "id": "112_DONT_EXPAND_NEWLINES",
+    "input": "DONT_EXPAND=dontexpand\\nnewlines",
+    "expected": {
+      "DONT_EXPAND": "dontexpand\\nnewlines"
+    },
+    "notes": "literal backslash-n in and out (unquoted values never expand escapes)"
+  },
+  {
+    "id": "113_HY-PHEN",
+    "input": "# https://github.com/joho/godotenv/pull/245\nHY-PHEN=hyphen",
+    "expected": {
+      "HY-PHEN": "hyphen"
+    }
+  },
+  {
+    "id": "114_RETAIN_INNER_QUOTES",
+    "input": "RETAIN_INNER_QUOTES={\"foo\": \"bar\"}",
+    "expected": {
+      "RETAIN_INNER_QUOTES": "{\"foo\": \"bar\"}"
+    }
+  },
+  {
+    "id": "115_DOLLAR",
+    "input": "DOLLAR=$",
+    "expected": {
+      "DOLLAR": "$"
+    }
+  },
+  {
+    "id": "116_DOTS",
+    "input": "POSTGRESQL.BASE.USER=postgres",
+    "expected": {
+      "POSTGRESQL.BASE.USER": "postgres"
+    }
+  },
+  {
+    "id": "117_DONT_CHOKE",
+    "input": "DONT_CHOKE1='.kZh`>4[,[DDU-*Jt+[;8-,@K=,9%;F9KsoXqOE)gpG^X!{)Q+/9Fc(QF}i[NEi!'\nDONT_CHOKE2='=;+=CNy3)-D=zI6gRP2w\\$B@0K;Y]e^EFnCmx\\$Dx?;.9wf-rgk1BcTR0]JtY<S:b_'\nDONT_CHOKE3='MUcKSGSY@HCON<1S_siWTP`DgS*Ug],mu]SkqI|7V2eOk9:>&fw;>HEwms`D8E2H'\nDONT_CHOKE4='m]zjzfRItw2gs[2:{p{ugENyFw9m)tH6_VCQzer`*noVaI<vqa3?FZ9+6U;K#Bfd'\nDONT_CHOKE5='#la__nK?IxNlQ%`5q&DpcZ>Munx=[1-AMgAcwmPkToxTaB?kgdF5y`A8m=Oa-B!)'\nDONT_CHOKE6='xlC&*<j4J<d._<JKH0RBJV!4(ZQEN-+&!0p137<g*hdY2H4xk?/;KO1\\$(W{:Wc}Q'\nDONT_CHOKE7='?\\$6)m*xhTVewc#NVVgxX%eBhJjoHYzpXFg=gzn[rWXPLj5UWj@z\\$/UDm8o79n/p%'\nDONT_CHOKE8='@}:[4#g%[R-CFR});bY(Z[KcDQDsVn2_y4cSdU<Mjy!c^F`G<!Ks7]kbS]N1:bP:'",
+    "expected": {
+      "DONT_CHOKE1": ".kZh`>4[,[DDU-*Jt+[;8-,@K=,9%;F9KsoXqOE)gpG^X!{)Q+/9Fc(QF}i[NEi!",
+      "DONT_CHOKE2": "=;+=CNy3)-D=zI6gRP2w\\$B@0K;Y]e^EFnCmx\\$Dx?;.9wf-rgk1BcTR0]JtY<S:b_",
+      "DONT_CHOKE3": "MUcKSGSY@HCON<1S_siWTP`DgS*Ug],mu]SkqI|7V2eOk9:>&fw;>HEwms`D8E2H",
+      "DONT_CHOKE4": "m]zjzfRItw2gs[2:{p{ugENyFw9m)tH6_VCQzer`*noVaI<vqa3?FZ9+6U;K#Bfd",
+      "DONT_CHOKE5": "#la__nK?IxNlQ%`5q&DpcZ>Munx=[1-AMgAcwmPkToxTaB?kgdF5y`A8m=Oa-B!)",
+      "DONT_CHOKE6": "xlC&*<j4J<d._<JKH0RBJV!4(ZQEN-+&!0p137<g*hdY2H4xk?/;KO1\\$(W{:Wc}Q",
+      "DONT_CHOKE7": "?\\$6)m*xhTVewc#NVVgxX%eBhJjoHYzpXFg=gzn[rWXPLj5UWj@z\\$/UDm8o79n/p%",
+      "DONT_CHOKE8": "@}:[4#g%[R-CFR});bY(Z[KcDQDsVn2_y4cSdU<Mjy!c^F`G<!Ks7]kbS]N1:bP:"
+    },
+    "notes": "single-quoted; backslashes (incl. \\$) preserved verbatim — literals never reach expand/resolveEscapeSequences; mirrors tests/.env.expand DONT_CHOKE1-8"
+  },
+  {
+    "id": "201_SINGLE_QUOTES",
+    "input": "SINGLE_QUOTES='single_quotes'",
+    "expected": {
+      "SINGLE_QUOTES": "single_quotes"
+    }
+  },
+  {
+    "id": "202_SINGLE_QUOTES_EMPTY",
+    "input": "EMPTY=''",
+    "expected": {
+      "EMPTY": ""
+    }
+  },
+  {
+    "id": "203_SINGLE_QUOTES_SPACED",
+    "input": "SINGLE_QUOTES_SPACED='    single quotes    '",
+    "expected": {
+      "SINGLE_QUOTES_SPACED": "    single quotes    "
+    }
+  },
+  {
+    "id": "204_SINGLE_QUOTES_DONT_EXPAND_NEWLINES",
+    "input": "DONT_EXPAND='dontexpand\\nnewlines'",
+    "expected": {
+      "DONT_EXPAND": "dontexpand\\nnewlines"
+    },
+    "notes": "literal backslash-n preserved (single quotes never expand escapes)"
+  },
+  {
+    "id": "205_SINGLE_QUOTES_INLINE_COMMENT",
+    "input": "INLINE_COMMENT='inline comments outside of #singlequotes' # work",
+    "expected": {
+      "INLINE_COMMENT": "inline comments outside of #singlequotes"
+    }
+  },
+  {
+    "id": "206_SINGLE_QUOTES_MULTILINE",
+    "input": "MULTILINE='one\ntwo\nthree'",
+    "expected": {
+      "MULTILINE": "one\ntwo\nthree"
+    },
+    "notes": "real newlines inside quotes; quoted alternatives in the LINE regex span newlines"
+  },
+  {
+    "id": "207_SINGLE_QUOTES_RETAIN_INNER_QUOTES",
+    "input": "RETAIN_INNER_QUOTES_AS_STRING='{\"foo\": \"bar\"}'",
+    "expected": {
+      "RETAIN_INNER_QUOTES_AS_STRING": "{\"foo\": \"bar\"}"
+    }
+  },
+  {
+    "id": "208_SINGLE_QUOTES_WITH_DOUBLE_QUOTES_INSIDE",
+    "input": "DOUBLE_QUOTES_INSIDE_SINGLE='double \"quotes\" work inside single quotes'",
+    "expected": {
+      "DOUBLE_QUOTES_INSIDE_SINGLE": "double \"quotes\" work inside single quotes"
+    }
+  },
+  {
+    "id": "209_SINGLE_QUOTES_WITH_BACKTICKS_INSIDE",
+    "input": "BACKTICKS_INSIDE_SINGLE='`backticks` work inside single quotes'",
+    "expected": {
+      "BACKTICKS_INSIDE_SINGLE": "`backticks` work inside single quotes"
+    }
+  },
+  {
+    "id": "210_SINGLE_QUOTES_PARENTHESES",
+    "input": "# https://github.com/bkeepers/dotenv/pull/526\nPARENTHESES='passwo(rd'",
+    "expected": {
+      "PARENTHESES": "passwo(rd"
+    }
+  },
+  {
+    "id": "301_DOUBLE_QUOTES",
+    "input": "DOUBLE_QUOTES=\"double_quotes\"",
+    "expected": {
+      "DOUBLE_QUOTES": "double_quotes"
+    }
+  },
+  {
+    "id": "302_DOUBLE_QUOTES_EMPTY",
+    "input": "EMPTY=\"\"",
+    "expected": {
+      "EMPTY": ""
+    }
+  },
+  {
+    "id": "303_DOUBLE_QUOTES_SPACED",
+    "input": "DOUBLE_QUOTES_SPACED=\"    double quotes    \"",
+    "expected": {
+      "DOUBLE_QUOTES_SPACED": "    double quotes    "
+    }
+  },
+  {
+    "id": "304_DOUBLE_QUOTES_EXPAND_NEWLINES",
+    "input": "EXPAND_NEWLINES=\"expand\\nnew\\nlines\"",
+    "expected": {
+      "EXPAND_NEWLINES": "expand\nnew\nlines"
+    },
+    "notes": "\\n escape expands to real LF ONLY in double quotes"
+  },
+  {
+    "id": "305_DOUBLE_QUOTES_INLINE_COMMENT",
+    "input": "INLINE_COMMENTS_DOUBLE_QUOTES=\"inline comments outside of #doublequotes\" # work",
+    "expected": {
+      "INLINE_COMMENTS_DOUBLE_QUOTES": "inline comments outside of #doublequotes"
+    }
+  },
+  {
+    "id": "306_DOUBLE_QUOTES_MULTILINE",
+    "input": "MULTILINE=\"one\ntwo\nthree\"",
+    "expected": {
+      "MULTILINE": "one\ntwo\nthree"
+    }
+  },
+  {
+    "id": "307_DOUBLE_QUOTES_MULTILINE_PEM",
+    "input": "MULTILINE_PEM_DOUBLE=\"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnNl1tL3QjKp3DZWM0T3u\nLgGJQwu9WqyzHKZ6WIA5T+7zPjO1L8l3S8k8YzBrfH4mqWOD1GBI8Yjq2L1ac3Y/\nbTdfHN8CmQr2iDJC0C6zY8YV93oZB3x0zC/LPbRYpF8f6OqX1lZj5vo2zJZy4fI/\nkKcI5jHYc8VJq+KCuRZrvn+3V+KuL9tF9v8ZgjF2PZbU+LsCy5Yqg1M8f5Jp5f6V\nu4QuUoobAgMBAAE=\n-----END PUBLIC KEY-----\"",
+    "expected": {
+      "MULTILINE_PEM_DOUBLE": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnNl1tL3QjKp3DZWM0T3u\nLgGJQwu9WqyzHKZ6WIA5T+7zPjO1L8l3S8k8YzBrfH4mqWOD1GBI8Yjq2L1ac3Y/\nbTdfHN8CmQr2iDJC0C6zY8YV93oZB3x0zC/LPbRYpF8f6OqX1lZj5vo2zJZy4fI/\nkKcI5jHYc8VJq+KCuRZrvn+3V+KuL9tF9v8ZgjF2PZbU+LsCy5Yqg1M8f5Jp5f6V\nu4QuUoobAgMBAAE=\n-----END PUBLIC KEY-----"
+    },
+    "notes": "mirrors tests/.env.multiline MULTI_PEM_DOUBLE_QUOTED"
+  },
+  {
+    "id": "308_DOUBLE_QUOTES_WITH_SINGLE_QUOTES_INSIDE",
+    "input": "SINGLE_QUOTES_INSIDE_DOUBLE=\"single 'quotes' work inside double quotes\"",
+    "expected": {
+      "SINGLE_QUOTES_INSIDE_DOUBLE": "single 'quotes' work inside double quotes"
+    }
+  },
+  {
+    "id": "309_DOUBLE_QUOTES_WITH_BACKTICKS_INSIDE",
+    "input": "BACKTICKS_INSIDE_DOUBLE=\"`backticks` work inside double quotes\"",
+    "expected": {
+      "BACKTICKS_INSIDE_DOUBLE": "`backticks` work inside double quotes"
+    }
+  },
+  {
+    "id": "310_DOUBLE_QUOTES_WITH_NO_SPACE_BRACKET",
+    "input": "DOUBLE_QUOTES_WITH_NO_SPACE_BRACKET=\"{ port: $MONGOLAB_PORT}\"",
+    "expected": {
+      "DOUBLE_QUOTES_WITH_NO_SPACE_BRACKET": "{ port: }"
+    },
+    "notes": "$MONGOLAB_PORT undefined -> empty string"
+  },
+  {
+    "id": "311_DOUBLE_QUOTES_TWO_DOLLAR_SIGNS",
+    "input": "TWO_DOLLAR_SIGNS=\"abcd$$1234\"",
+    "expected": {
+      "TWO_DOLLAR_SIGNS": "abcd$$1234"
+    },
+    "notes": "$$ then digit: neither $ starts a valid var name ([A-Za-z_] required) -> untouched"
+  },
+  {
+    "id": "401_BACKTICKS",
+    "input": "BACKTICKS=`backticks`",
+    "expected": {
+      "BACKTICKS": "backticks"
+    }
+  },
+  {
+    "id": "402_BACKTICKS_EMPTY",
+    "input": "EMPTY=``",
+    "expected": {
+      "EMPTY": ""
+    }
+  },
+  {
+    "id": "403_BACKTICKS_SPACED",
+    "input": "BACKTICKS_SPACED=`    backticks    `",
+    "expected": {
+      "BACKTICKS_SPACED": "    backticks    "
+    }
+  },
+  {
+    "id": "404_BACKTICKS_INLINE_COMMENT",
+    "input": "INLINE_COMMENTS_BACKTICKS=`inline comments outside of #backticks` # work",
+    "expected": {
+      "INLINE_COMMENTS_BACKTICKS": "inline comments outside of #backticks"
+    }
+  },
+  {
+    "id": "405_BACKTICKS_SINGLE_QUOTES_INSIDE",
+    "input": "SINGLE_QUOTES_INSIDE_BACKTICKS=`single 'quotes' work inside backticks`",
+    "expected": {
+      "SINGLE_QUOTES_INSIDE_BACKTICKS": "single 'quotes' work inside backticks"
+    }
+  },
+  {
+    "id": "406_BACKTICKS_DOUBLE_QUOTES_INSIDE",
+    "input": "DOUBLE_QUOTES_INSIDE_BACKTICKS=`double \"quotes\" work inside backticks`",
+    "expected": {
+      "DOUBLE_QUOTES_INSIDE_BACKTICKS": "double \"quotes\" work inside backticks"
+    }
+  },
+  {
+    "id": "407_BACKTICKS_DOUBLE_AND_SINGLE_QUOTES_INSIDE",
+    "input": "DOUBLE_AND_SINGLE_QUOTES_INSIDE_BACKTICKS=`double \"quotes\" and single 'quotes' work inside backticks`",
+    "expected": {
+      "DOUBLE_AND_SINGLE_QUOTES_INSIDE_BACKTICKS": "double \"quotes\" and single 'quotes' work inside backticks"
+    }
+  },
+  {
+    "id": "408_BACKTICKS_RETAIN_INNER_QUOTES",
+    "input": "RETAIN_INNER_QUOTES_AS_BACKTICKS=`{\"foo\": \"bar's\"}`",
+    "expected": {
+      "RETAIN_INNER_QUOTES_AS_BACKTICKS": "{\"foo\": \"bar's\"}"
+    }
+  },
+  {
+    "id": "501_EXPAND",
+    "input": "BASIC=basic\nBASIC_EXPAND=$BASIC",
+    "expected": {
+      "BASIC": "basic",
+      "BASIC_EXPAND": "basic"
+    }
+  },
+  {
+    "id": "502_EXPAND_MACHINE",
+    "input": "MACHINE=file\nMACHINE_EXPAND=$MACHINE",
+    "expected": {
+      "MACHINE": "machine",
+      "MACHINE_EXPAND": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    },
+    "notes": "processEnv wins for both the value and the expansion lookup"
+  },
+  {
+    "id": "503_EXPAND_FILE",
+    "input": "FILE=file\nFILE_EXPAND=$FILE",
+    "expected": {
+      "FILE": "file",
+      "FILE_EXPAND": "file"
+    }
+  },
+  {
+    "id": "504_EXPAND_PARENTHESES",
+    "input": "# https://github.com/bkeepers/dotenv/pull/526\nPARENTHESES='passwo(rd'\nPARENTHESES_EXPAND=\"$(echo \"$PARENTHESES\")\"",
+    "expected": {
+      "PARENTHESES": "passwo(rd",
+      "PARENTHESES_EXPAND": "passwo(rd"
+    },
+    "notes": "command substitution: runningParsed overrides processEnv in the child env"
+  },
+  {
+    "id": "505_EXPAND_RETAIN_INNER_QUOTES",
+    "input": "# https://github.com/bkeepers/dotenv/issues/530\n# Command substitution double-quote expansion\nRETAIN_INNER_QUOTES={\"foo\": \"bar\"}\nRETAIN_INNER_QUOTES_EXPAND=\"$(echo \"$RETAIN_INNER_QUOTES\")\"",
+    "expected": {
+      "RETAIN_INNER_QUOTES": "{\"foo\": \"bar\"}",
+      "RETAIN_INNER_QUOTES_EXPAND": "{\"foo\": \"bar\"}"
+    }
+  },
+  {
+    "id": "506_EXPAND_SINGLE_QUOTES_RETAIN_INNER_QUOTES",
+    "input": "RETAIN_INNER_QUOTES_AS_STRING='{\"foo\": \"bar\"}'\nRETAIN_INNER_QUOTES_AS_STRING_EXPAND=\"$(echo \"$RETAIN_INNER_QUOTES_AS_STRING\")\"",
+    "expected": {
+      "RETAIN_INNER_QUOTES_AS_STRING": "{\"foo\": \"bar\"}",
+      "RETAIN_INNER_QUOTES_AS_STRING_EXPAND": "{\"foo\": \"bar\"}"
+    }
+  },
+  {
+    "id": "507_EXPAND_ESCAPED",
+    "input": "ESCAPED_EXPAND=\\$ESCAPED",
+    "expected": {
+      "ESCAPED_EXPAND": "$ESCAPED"
+    },
+    "notes": "lookbehind (?<!\\\\) blocks expansion; parse's resolveEscapeSequences then rewrites \\$ -> $"
+  },
+  {
+    "id": "508_EXPAND_NO_QUOTES_COMBOS",
+    "input": "ONE=one\nTWO=two\nONETWO=${ONE}${TWO}\nONETWO_SIMPLE=${ONE}$TWO\nONETWO_SIMPLE2=$ONE${TWO}\nONETWO_SUPER_SIMPLE=$ONE$TWO",
+    "expected": {
+      "ONE": "one",
+      "TWO": "two",
+      "ONETWO": "onetwo",
+      "ONETWO_SIMPLE": "onetwo",
+      "ONETWO_SIMPLE2": "onetwo",
+      "ONETWO_SUPER_SIMPLE": "onetwo"
+    }
+  },
+  {
+    "id": "509_EXPAND_SELF",
+    "input": "EXPAND_SELF=$EXPAND_SELF",
+    "expected": {
+      "EXPAND_SELF": ""
+    },
+    "notes": "self-reference: not yet in runningParsed/processEnv at expansion time -> empty; mirrors tests/.env.expand EXPAND_SELF (dotenv-expand#98)"
+  },
+  {
+    "id": "510_EXPAND_URI",
+    "input": "MONGOLAB_DATABASE=heroku_db\nMONGOLAB_USER=username\nMONGOLAB_PASSWORD=password\nMONGOLAB_DOMAIN=abcd1234.mongolab.com\nMONGOLAB_PORT=12345\nMONGOLAB_URI=mongodb://${MONGOLAB_USER}:${MONGOLAB_PASSWORD}@${MONGOLAB_DOMAIN}:${MONGOLAB_PORT}/${MONGOLAB_DATABASE}",
+    "expected": {
+      "MONGOLAB_DATABASE": "heroku_db",
+      "MONGOLAB_USER": "username",
+      "MONGOLAB_PASSWORD": "password",
+      "MONGOLAB_DOMAIN": "abcd1234.mongolab.com",
+      "MONGOLAB_PORT": "12345",
+      "MONGOLAB_URI": "mongodb://username:password@abcd1234.mongolab.com:12345/heroku_db"
+    },
+    "notes": "value reconstructed: the spec page's HTML extraction garbles emails/URIs via Cloudflare email-obfuscation ('[email protected]'); real value cross-checked against tests fixtures; tests/.env.expand MONGOLAB_URI + tests/lib/config-expand.test.js"
+  },
+  {
+    "id": "511_EXPAND_URI_RECURSIVE",
+    "input": "MONGOLAB_DATABASE=heroku_db\nMONGOLAB_USER=username\nMONGOLAB_PASSWORD=password\nMONGOLAB_DOMAIN=abcd1234.mongolab.com\nMONGOLAB_PORT=12345\nMONGOLAB_USER_RECURSIVE=${MONGOLAB_USER}:${MONGOLAB_PASSWORD}\nMONGOLAB_URI_RECURSIVE=mongodb://${MONGOLAB_USER_RECURSIVE}@${MONGOLAB_DOMAIN}:${MONGOLAB_PORT}/${MONGOLAB_DATABASE}",
+    "expected": {
+      "MONGOLAB_DATABASE": "heroku_db",
+      "MONGOLAB_USER": "username",
+      "MONGOLAB_PASSWORD": "password",
+      "MONGOLAB_DOMAIN": "abcd1234.mongolab.com",
+      "MONGOLAB_PORT": "12345",
+      "MONGOLAB_USER_RECURSIVE": "username:password",
+      "MONGOLAB_URI_RECURSIVE": "mongodb://username:password@abcd1234.mongolab.com:12345/heroku_db"
+    },
+    "notes": "value reconstructed: the spec page's HTML extraction garbles emails/URIs via Cloudflare email-obfuscation ('[email protected]'); real value cross-checked against tests fixtures"
+  },
+  {
+    "id": "512_EXPAND_URI_NO_CURLY_BRACES",
+    "input": "MONGOLAB_DATABASE=heroku_db\nMONGOLAB_USER=username\nMONGOLAB_PASSWORD=password\nMONGOLAB_DOMAIN=abcd1234.mongolab.com\nMONGOLAB_PORT=12345\nMONGOLAB_URI=mongodb://$MONGOLAB_USER:$MONGOLAB_PASSWORD@$MONGOLAB_DOMAIN:$MONGOLAB_PORT/$MONGOLAB_DATABASE",
+    "expected": {
+      "MONGOLAB_DATABASE": "heroku_db",
+      "MONGOLAB_USER": "username",
+      "MONGOLAB_PASSWORD": "password",
+      "MONGOLAB_DOMAIN": "abcd1234.mongolab.com",
+      "MONGOLAB_PORT": "12345",
+      "MONGOLAB_URI": "mongodb://username:password@abcd1234.mongolab.com:12345/heroku_db"
+    },
+    "notes": "value reconstructed: the spec page's HTML extraction garbles emails/URIs via Cloudflare email-obfuscation ('[email protected]'); real value cross-checked against tests fixtures; unbraced $NAME stops at ':' and '@' and '/'"
+  },
+  {
+    "id": "513_EXPAND_URI_RECURSIVE_NO_CURLY_BRACES",
+    "input": "MONGOLAB_DATABASE=heroku_db\nMONGOLAB_USER=username\nMONGOLAB_PASSWORD=password\nMONGOLAB_DOMAIN=abcd1234.mongolab.com\nMONGOLAB_PORT=12345\nMONGOLAB_USER_RECURSIVE=$MONGOLAB_USER:$MONGOLAB_PASSWORD\nMONGOLAB_URI_RECURSIVE=mongodb://$MONGOLAB_USER_RECURSIVE@$MONGOLAB_DOMAIN:$MONGOLAB_PORT/$MONGOLAB_DATABASE",
+    "expected": {
+      "MONGOLAB_DATABASE": "heroku_db",
+      "MONGOLAB_USER": "username",
+      "MONGOLAB_PASSWORD": "password",
+      "MONGOLAB_DOMAIN": "abcd1234.mongolab.com",
+      "MONGOLAB_PORT": "12345",
+      "MONGOLAB_USER_RECURSIVE": "username:password",
+      "MONGOLAB_URI_RECURSIVE": "mongodb://username:password@abcd1234.mongolab.com:12345/heroku_db"
+    },
+    "notes": "value reconstructed: the spec page's HTML extraction garbles emails/URIs via Cloudflare email-obfuscation ('[email protected]'); real value cross-checked against tests fixtures"
+  },
+  {
+    "id": "514_EXPAND_DOTS",
+    "input": "POSTGRESQL.BASE.USER=postgres\nPOSTGRESQL.MAIN.USER=${POSTGRESQL.BASE.USER}",
+    "expected": {
+      "POSTGRESQL.BASE.USER": "postgres",
+      "POSTGRESQL.MAIN.USER": "postgres"
+    },
+    "notes": "braced body [^{}]+ accepts dots even though unbraced $NAME does not"
+  },
+  {
+    "id": "515_EXPAND_NOT_FOR_SINGLE_QUOTE",
+    "input": "SINGLE_QUOTE='$BASIC'",
+    "expected": {
+      "SINGLE_QUOTE": "$BASIC"
+    },
+    "notes": "single-quoted values skip expansion entirely"
+  },
+  {
+    "id": "516_EXPAND_PROGRESSIVE",
+    "input": "PROGRESSIVE=first\nPROGRESSIVE=${PROGRESSIVE}-second",
+    "expected": {
+      "PROGRESSIVE": "first-second"
+    },
+    "notes": "duplicate key: second occurrence expands against runningParsed (first-second); last wins"
+  },
+  {
+    "id": "517_EXPAND_DEFAULT",
+    "input": "EXPAND_DEFAULT=${MACHINE:-default}",
+    "expected": {
+      "EXPAND_DEFAULT": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "518_EXPAND_DEFAULT2",
+    "input": "EXPAND_DEFAULT2=${MACHINE-default}",
+    "expected": {
+      "EXPAND_DEFAULT2": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "519_EXPAND_DEFAULT_NESTED",
+    "input": "EXPAND_DEFAULT_NESTED=${MACHINE:-${UNDEFINED:-default}}",
+    "expected": {
+      "EXPAND_DEFAULT_NESTED": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    },
+    "notes": "nested braces resolve inner-most first because the braced body is [^{}]+"
+  },
+  {
+    "id": "520_EXPAND_DEFAULT_NESTED2",
+    "input": "EXPAND_DEFAULT_NESTED2=${MACHINE-${UNDEFINED-default}}",
+    "expected": {
+      "EXPAND_DEFAULT_NESTED2": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "521_EXPAND_DEFAULT_NESTED_TWICE",
+    "input": "EXPAND_DEFAULT_NESTED_TWICE=${UNDEFINED:-${MACHINE}${UNDEFINED:-default}}",
+    "expected": {
+      "EXPAND_DEFAULT_NESTED_TWICE": "machinedefault"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "522_EXPAND_DEFAULT_NESTED_TWICE2",
+    "input": "EXPAND_DEFAULT_NESTED_TWICE2=${UNDEFINED-${MACHINE}${UNDEFINED-default}}",
+    "expected": {
+      "EXPAND_DEFAULT_NESTED_TWICE2": "machinedefault"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "523_EXPAND_DEFAULT_SPECIAL_CHARACTERS",
+    "input": "EXPAND_DEFAULT_SPECIAL_CHARACTERS=${MACHINE:-/default/path:with/colon}",
+    "expected": {
+      "EXPAND_DEFAULT_SPECIAL_CHARACTERS": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "524_EXPAND_DEFAULT_SPECIAL_CHARACTERS2",
+    "input": "EXPAND_DEFAULT_SPECIAL_CHARACTERS2=${MACHINE-/default/path:with/colon}",
+    "expected": {
+      "EXPAND_DEFAULT_SPECIAL_CHARACTERS2": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "525_EXPAND_UNDEFINED",
+    "input": "EXPAND_UNDEFINED=$UNDEFINED",
+    "expected": {
+      "EXPAND_UNDEFINED": ""
+    }
+  },
+  {
+    "id": "526_EXPAND_UNDEFINED_NESTED",
+    "input": "EXPAND_UNDEFINED_NESTED=${UNDEFINED:-${MACHINE:-default}}",
+    "expected": {
+      "EXPAND_UNDEFINED_NESTED": "machine"
+    },
+    "env": {
+      "MACHINE": "machine"
+    }
+  },
+  {
+    "id": "527_EXPAND_UNDEFINED_DEFAULT",
+    "input": "EXPAND_UNDEFINED_DEFAULT=${UNDEFINED:-default}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT": "default"
+    }
+  },
+  {
+    "id": "528_EXPAND_UNDEFINED_DEFAULT2",
+    "input": "EXPAND_UNDEFINED_DEFAULT2=${UNDEFINED-default}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT2": "default"
+    },
+    "notes": "v1.8.1 '-' = set-check via hasOwnProperty"
+  },
+  {
+    "id": "529_EXPAND_UNDEFINED_DEFAULT_NESTED",
+    "input": "EXPAND_UNDEFINED_DEFAULT_NESTED=${UNDEFINED:-${UNDEFINED:-default}}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT_NESTED": "default"
+    }
+  },
+  {
+    "id": "530_EXPAND_UNDEFINED_DEFAULT2_NESTED",
+    "input": "EXPAND_UNDEFINED_DEFAULT2_NESTED=${UNDEFINED-${UNDEFINED-default}}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT2_NESTED": "default"
+    }
+  },
+  {
+    "id": "531_EXPAND_UNDEFINED_DEFAULT_NESTED_TWICE",
+    "input": "EXPAND_UNDEFINED_DEFAULT_NESTED_TWICE=${UNDEFINED:-${UNDEFINED:-${UNDEFINED:-default}}}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT_NESTED_TWICE": "default"
+    }
+  },
+  {
+    "id": "532_EXPAND_UNDEFINED_DEFAULT2_NESTED_TWICE",
+    "input": "EXPAND_UNDEFINED_DEFAULT2_NESTED_TWICE=${UNDEFINED-${UNDEFINED-${UNDEFINED-default}}}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT2_NESTED_TWICE": "default"
+    }
+  },
+  {
+    "id": "533_EXPAND_UNDEFINED_DEFAULT_SPECIAL_CHARACTERS",
+    "input": "EXPAND_UNDEFINED_DEFAULT_SPECIAL_CHARACTERS=${UNDEFINED:-/default/path:with/colon}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT_SPECIAL_CHARACTERS": "/default/path:with/colon"
+    },
+    "notes": "first-op-wins then split-on-all + rejoin keeps the ':' inside the default"
+  },
+  {
+    "id": "534_EXPAND_UNDEFINED_DEFAULT2_SPECIAL_CHARACTERS",
+    "input": "EXPAND_UNDEFINED_DEFAULT2_SPECIAL_CHARACTERS=${UNDEFINED-/default/path:with/colon}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT2_SPECIAL_CHARACTERS": "/default/path:with/colon"
+    }
+  },
+  {
+    "id": "535_EXPAND_UNDEFINED_DEFAULT_SPECIAL_CHARACTERS_NESTED",
+    "input": "EXPAND_UNDEFINED_DEFAULT_SPECIAL_CHARACTERS_NESTED=${UNDEFINED:-${UNDEFINED_2:-/default/path:with/colon}}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT_SPECIAL_CHARACTERS_NESTED": "/default/path:with/colon"
+    }
+  },
+  {
+    "id": "536_EXPAND_UNDEFINED_DEFAULT2_SPECIAL_CHARACTERS_NESTED",
+    "input": "EXPAND_UNDEFINED_DEFAULT2_SPECIAL_CHARACTERS_NESTED=${UNDEFINED-${UNDEFINED_2-/default/path:with/colon}}",
+    "expected": {
+      "EXPAND_UNDEFINED_DEFAULT2_SPECIAL_CHARACTERS_NESTED": "/default/path:with/colon"
+    }
+  },
+  {
+    "id": "537_EXPAND_DEEP8",
+    "input": "BASIC=basic\nEXPAND_DEEP8=${QUXX:-prefix5-${QUX:-prefix4-${BAZ:-prefix3-${BAR:-prefix2-${FOO:-prefix1-${BASIC:-test}-suffix1}-suffix2}-suffix3}-suffix4}-suffix5}",
+    "expected": {
+      "BASIC": "basic",
+      "EXPAND_DEEP8": "prefix5-prefix4-prefix3-prefix2-prefix1-basic-suffix1-suffix2-suffix3-suffix4-suffix5"
+    },
+    "notes": "deep nesting resolved inner-out; mirrors tests/lib/config-expand.test.js:345-352 (DEEP8)"
+  },
+  {
+    "id": "538_EXPAND_DEEP_SELF",
+    "input": "BASIC=basic\nEXPAND_DEEP_SELF=${EXPAND_DEEP_SELF:-${BASIC:-test}-bar}",
+    "expected": {
+      "BASIC": "basic",
+      "EXPAND_DEEP_SELF": "basic-bar"
+    }
+  },
+  {
+    "id": "539_EXPAND_DEEP_SELF_PRIOR",
+    "input": "BASIC=basic\nEXPAND_DEEP_SELF_PRIOR=foo\nEXPAND_DEEP_SELF_PRIOR=prefix2-${EXPAND_DEEP_SELF_PRIOR:-prefix1-${BASIC:-test}-suffix2}-suffix2",
+    "expected": {
+      "BASIC": "basic",
+      "EXPAND_DEEP_SELF_PRIOR": "prefix2-foo-suffix2"
+    },
+    "notes": "prior duplicate value ('foo') is in runningParsed and truthy, so the inner default branch never evaluates"
+  },
+  {
+    "id": "601_EVAL",
+    "input": "HELLO=\"$(echo world)\"",
+    "expected": {
+      "HELLO": "world"
+    },
+    "notes": "command substitution via execSync /bin/sh; mirrors tests/.env.eval (which uses the same content)"
+  },
+  {
+    "id": "901_LATIN1",
+    "input": "HELLO=latin1",
+    "expected": {
+      "HELLO": "latin1"
+    },
+    "encoding": "latin1",
+    "notes": "file saved as Latin-1; detectEncoding never returns latin1 -> read as utf8; content is ASCII-only so bytes are identical. Tap analog tests/.env.latin1 uses HELLO=\"latin1\""
+  },
+  {
+    "id": "902_UTF16LE",
+    "input": "HELLO=utf16le",
+    "expected": {
+      "HELLO": "utf16le"
+    },
+    "encoding": "utf16le",
+    "notes": "file is UTF-16LE with FF FE BOM; detectEncoding returns 'utf16le' from the BOM; BOM char survives decode and is absorbed by JS \\s in the LINE regex — Rust must strip/absorb it explicitly. Tap analog tests/.env.utf16le uses HELLO=\"utf16le\""
+  }
+]

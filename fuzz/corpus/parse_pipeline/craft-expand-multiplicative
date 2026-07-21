@@ -1,0 +1,2 @@
+SET=\${SET}$'x
+X=${SET}${SET}

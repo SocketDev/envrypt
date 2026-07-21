@@ -1,0 +1,226 @@
+# envrypt CI. The project is a single publishable **library** crate (`envrypt`) — no
+# CLI, no binary, no packaging. This workflow gates fmt/clippy, the workspace test
+# suite (+ doctests + examples), the self-contained conformance corpus (checked-in
+# spec cases and frozen crypto/interop vectors), and the positive-allowlist
+# dependency budget.
+name: rust
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'conformance/**'
+      - 'rustfmt.toml'
+      - 'clippy.toml'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'conformance/**'
+      - 'rustfmt.toml'
+      - 'clippy.toml'
+      - '.github/workflows/rust.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Fast gate: format, lint (warnings are errors), the full test suite, doctests,
+  # examples, and a bench build-check.
+  test:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy (all targets, all features, deny warnings)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: test (workspace, all features)
+        run: cargo test --workspace --all-features
+      - name: doctests
+        run: cargo test --doc -p envrypt
+      - name: examples build
+        run: cargo build --examples -p envrypt
+      - name: bench build (cargo bench --no-run, default features)
+        run: cargo bench --no-run -p envrypt
+
+  # Library-level parse conformance: the tier-1 spec corpus (88 spec cases) + the
+  # case-28 encoding slice, asserted through envrypt's parse pipeline. The corpus is
+  # fully checked in and self-contained; frozen crypto/interop vector checks run in
+  # the `test` job's `cargo test --workspace` (crates/envrypt/tests).
+  conformance:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: tier-1 spec + case-28 parse conformance (no binary)
+        run: cargo test -p envrypt-conformance
+
+  # Dependency-budget gate for the `envrypt` library default features, run as a
+  # POSITIVE ALLOWLIST: `cargo tree -e normal` must contain ONLY the audited
+  # pure-Rust set, so any NEW crate (including a missed device-store dep) fails the
+  # build, not just the named banlist. The banlist stays as a secondary
+  # belt-and-suspenders assertion.
+  deps:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: positive allowlist — envrypt default-features tree is the audited set only
+        run: |
+          set -euo pipefail
+          # The audited pure-Rust dependency set (linux/default features). ADD a crate
+          # here only after auditing it (no HTTP/async/openssl/CLI machinery).
+          # v3 value-format crypto (docs/envrypt/CRYPTO-V3.md) adds: argon2 (+blake2,
+          # Argon2id KDF), chacha20poly1305 (+chacha20/poly1305, XChaCha20 AEAD),
+          # x25519-dalek (+curve25519-dalek and its derive), and the zeroize derive
+          # closure (zeroize_derive → proc-macro2/quote/syn/unicode-ident, compile-time
+          # proc-macros for secret zeroization) — all RustCrypto/dalek, pure Rust.
+          cat > /tmp/allow.txt <<'EOF'
+          aead
+          aes
+          aes-gcm
+          aho-corasick
+          argon2
+          base16ct
+          base64ct
+          bit-set
+          bit-vec
+          blake2
+          block-buffer
+          bstr
+          cfg-if
+          chacha20
+          chacha20poly1305
+          cipher
+          const-oid
+          cpufeatures
+          crossbeam-deque
+          crossbeam-epoch
+          crossbeam-utils
+          crypto-bigint
+          crypto-common
+          ctr
+          curve25519-dalek
+          curve25519-dalek-derive
+          der
+          digest
+          elliptic-curve
+          envrypt
+          equivalent
+          fancy-regex
+          ff
+          generic-array
+          getrandom
+          ghash
+          globset
+          group
+          hashbrown
+          hkdf
+          hmac
+          ignore
+          indexmap
+          inout
+          itoa
+          k256
+          libc
+          log
+          memchr
+          opaque-debug
+          password-hash
+          pbkdf2
+          poly1305
+          polyval
+          proc-macro2
+          quote
+          rand_core
+          regex
+          regex-automata
+          regex-syntax
+          salsa20
+          same-file
+          scrypt
+          sec1
+          serde_core
+          serde_json
+          sha2
+          subtle
+          syn
+          typenum
+          unicode-ident
+          universal-hash
+          walkdir
+          x25519-dalek
+          zeroize
+          zeroize_derive
+          zmij
+          EOF
+          # The heredoc preserves the YAML indentation, so trim to bare crate names.
+          awk 'NF{print $1}' /tmp/allow.txt | sort -u > /tmp/allow.sorted && mv /tmp/allow.sorted /tmp/allow.txt
+          cargo tree -e normal -p envrypt --prefix none \
+            | awk '{print $1}' | grep -vE '^$' | sort -u > /tmp/tree.txt
+          echo "=== envrypt -e normal tree ==="; cat /tmp/tree.txt
+          extra=$(comm -23 /tmp/tree.txt /tmp/allow.txt || true)
+          if [ -n "$extra" ]; then
+            echo "::error::envrypt pulled crate(s) not on the audited allowlist:"
+            echo "$extra"
+            echo "audit the crate, then add it to the allowlist in .github/workflows/rust.yml"
+            exit 1
+          fi
+          echo "OK — every envrypt dependency is on the audited allowlist"
+      - name: banlist (secondary) — no CLI/HTTP/async/device-store crates
+        run: |
+          set -euo pipefail
+          tree=$(cargo tree -e normal -p envrypt)
+          # openssl-sys/tokio/reqwest/hyper (HTTP/async); clap/signal-hook/nix/portable-pty
+          # (CLI); cbc (the dropped device-store cipher). aes/cipher/pbkdf2 remain as
+          # audited TRANSITIVE deps of aes-gcm/scrypt, so they are NOT banned by name.
+          if echo "$tree" | grep -Eiq '(^|[^-])openssl-sys|(^|[^-])tokio |reqwest|hyper |(^|[^-])clap |signal-hook|(^|[^-])nix |portable-pty|(^|[^-])cbc '; then
+            echo "::error::envrypt pulled a banned CLI/HTTP/async/device-store crate"
+            echo "$tree" | grep -Ei 'openssl-sys|tokio|reqwest|hyper|clap|signal-hook|nix|portable-pty|cbc'
+            exit 1
+          fi
+          echo "no banned crates in the envrypt default-features tree"
+      - name: no openssl-sys anywhere (incl. dev/build deps)
+        run: |
+          full=$(cargo tree --workspace --all-features -e normal,build,dev)
+          if echo "$full" | grep -iq 'openssl-sys'; then
+            echo "::error::openssl-sys present in the dependency graph (pure-Rust crypto only)"
+            echo "$full" | grep -i 'openssl'
+            exit 1
+          fi
+          echo "no openssl-sys in the workspace graph"

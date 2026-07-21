@@ -1,0 +1,127 @@
+# cargo-fuzz nightly job. Separate from the main Rust CI (`rust.yml`), which this
+# file never touches. Three targets (parse_pipeline / ecies_decrypt /
+# upsert_roundtrip in the `fuzz/` standalone workspace) run 10 CPU-min each on a
+# corpus cached between runs.
+#
+# On PRs/pushes that touch fuzzable code: a fast BUILD job (all targets compile via
+# cargo-fuzz) + the "no unsafe in envrypt without a // FUZZ: annotation" lint + a
+# short 60 s/target smoke over the committed seed corpus. The full
+# 10-min-per-target coverage-guided run is the nightly schedule.
+name: rust-fuzz
+
+on:
+  schedule:
+    # 07:00 UTC nightly — the standing fuzz cadence.
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'fuzz/**'
+      - 'crates/envrypt/**'
+      - '.github/workflows/rust-fuzz.yml'
+  pull_request:
+    paths:
+      - 'fuzz/**'
+      - 'crates/envrypt/**'
+      - '.github/workflows/rust-fuzz.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-fuzz-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fast gate on PRs/pushes: targets compile, the no-unsafe lint passes, and a
+  # short smoke run over the seed corpus is clean. Never scheduled.
+  build:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: 'fuzz -> target'
+      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+        with:
+          tool: cargo-fuzz
+      - name: 'no unsafe in envrypt without a // FUZZ: annotation'
+        run: bash fuzz/no-unsafe-without-fuzz.sh
+      # Reproducible fuzz builds require a committed Cargo.lock that matches the
+      # envrypt dependency graph. This gate fails when a change adds or updates an
+      # envrypt dependency without refreshing fuzz/Cargo.lock. `--locked` errors
+      # rather than rewriting.
+      - name: verify fuzz Cargo.lock is up to date (--locked)
+        run: cargo metadata --manifest-path fuzz/Cargo.toml --locked --format-version 1 > /dev/null
+      - name: build all fuzz targets
+        run: cargo +nightly fuzz build --target x86_64-unknown-linux-gnu
+      - name: regenerate seed corpus
+        run: python3 fuzz/seed-corpus.py
+      - name: smoke run (60 s/target over the seed corpus)
+        run: |
+          for t in parse_pipeline ecies_decrypt upsert_roundtrip; do
+            bash fuzz/run.sh "$t" 60
+          done
+
+  # Nightly coverage-guided run: 10 min/target, corpus cached between runs.
+  fuzz:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [parse_pipeline, ecies_decrypt, upsert_roundtrip]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: 'fuzz -> target'
+      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+        with:
+          tool: cargo-fuzz
+      # Corpus grows across nightly runs (coverage-guided). Save under a run-unique
+      # key, restore the most recent prior corpus via the shared prefix.
+      - name: restore cached corpus
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+      # ADDITIVE: layer the committed seeds ON TOP of the cache-restored,
+      # coverage-guided corpus WITHOUT deleting fuzzer-discovered growth (the
+      # default reset mode would rmtree the restored corpus, so growth could
+      # never accumulate across nights). Seed names never collide with libFuzzer's
+      # SHA1-hashed inputs, so this is a no-op for already-present seeds.
+      - name: seed corpus (additive — merge committed seeds into the cached set)
+        run: python3 fuzz/seed-corpus.py --additive
+      - name: fuzz ${{ matrix.target }} for 10 minutes
+        run: bash fuzz/run.sh ${{ matrix.target }} 600
+      # A crash/timeout/OOM writes fuzz/artifacts/<target>/. Upload it so the fix +
+      # minimized-regression-commit protocol (CONTRIBUTING-rust.md) can proceed.
+      - name: upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore

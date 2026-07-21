@@ -1,0 +1,3 @@
+{
+  "extends": "./.config/fleet/tsconfig.base.json"
+}

@@ -1,0 +1,26 @@
+[package]
+name = "envrypt-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Library-level conformance runner: drives the conformance/ parse corpus through envrypt's parse pipeline (no binary)."
+publish = false
+
+[dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+# `regex` backs `normalize`'s randomized-crypto masks. `indexmap`/`envrypt` back
+# the `parses_to` hook in `parser_conformance.rs` (the library parse pipeline).
+# This crate is `publish = false` and only ever a dev edge of the workspace, so
+# none of these reach a shipped `-e normal` tree.
+regex = { workspace = true }
+envrypt = { workspace = true }
+indexmap = { workspace = true }
+
+[dev-dependencies]
+# Dev edge ONLY: test-support is a dev-dependency, never published. The runner's
+# public API takes the base env via `BaseEnvFn`; the in-repo test harnesses inject
+# `test_support::standard_env()` from here.
+test-support = { workspace = true }

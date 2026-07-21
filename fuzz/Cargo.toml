@@ -1,0 +1,69 @@
+# WP-21 — cargo-fuzz workspace (doc 11 §7, ultrathink `lang/rust/fuzz/` shape).
+#
+# STANDALONE WORKSPACE (empty `[workspace]` table below + the parent workspace's
+# `exclude = ["fuzz"]`): so a stray `cargo build` at the repo root never sweeps the
+# fuzzer in, and the fuzzer never inherits the ship `[profile.release]` (which sets
+# `panic = "abort"` + `overflow-checks = false`). This crate's own inverted profile
+# turns assertions/overflow checks back ON — silent wraps become crash findings.
+#
+# `Cargo.lock` is COMMITTED (reproducible fuzz builds). Path-dep into `envrypt`
+# with default features, so the fuzz targets link the same graph the parse path
+# uses. cargo-fuzz sets the build-wide `--cfg fuzzing`, which activates the
+# parse-pipeline command-sub stub and the raw-wire crypto entry in envrypt (it
+# never spawns a shell on fuzz bytes). See docs/envrypt/fuzzing.md.
+
+[workspace]
+
+[package]
+name = "envrypt-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+indexmap = "2"
+envrypt = { path = "../crates/envrypt" }
+
+[lints.rust]
+# cargo-fuzz sets `--cfg fuzzing`; keep it out of the unexpected_cfgs warning so a
+# clippy run over the fuzz crate stays clean.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+# Inverted profile (doc 11 §7.1, verbatim rationale from ultrathink's fuzz Cargo.toml).
+[profile.release]
+debug = 1 # symbolized backtraces in crash reports
+debug-assertions = true # assertion violations become findings
+overflow-checks = true # silent wrapping arithmetic becomes a crash finding
+
+[[bin]]
+name = "parse_pipeline"
+path = "fuzz_targets/parse_pipeline.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ecies_decrypt"
+path = "fuzz_targets/ecies_decrypt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "upsert_roundtrip"
+path = "fuzz_targets/upsert_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sockeye_decode"
+path = "fuzz_targets/sockeye_decode.rs"
+test = false
+doc = false
+bench = false
