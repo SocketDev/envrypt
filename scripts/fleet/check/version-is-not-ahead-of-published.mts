@@ -8,10 +8,11 @@
  *   hint above it). Reads the registry's latest published version (npm
  *   `dist-tags.latest`, crates.io `max_stable_version`) and fails only when the
  *   manifest is ahead by more than a single valid bump. Both manifests are
- *   checked when both are present. Fail-OPEN: no published version (first
- *   release / registry unreachable), a private/unpublishable package, no cargo
- *   toolchain, an ambiguous multi-crate workspace, or any crash skips rather
- *   than false-fails, so a lint/type CI lane offline never trips it. Usage:
+ *   checked when both are present (a multi-crate cargo workspace checks every
+ *   publishable crate). Fail-OPEN: no published version (first release /
+ *   registry unreachable), a private/unpublishable package, no cargo toolchain,
+ *   or any crash skips rather than false-fails, so a lint/type CI lane offline
+ *   never trips it. Usage:
  *   node scripts/fleet/check/version-is-not-ahead-of-published.mts.
  */
 
@@ -25,7 +26,7 @@ import { lte } from '@socketsecurity/lib-stable/versions/compare'
 import { computeNextVersion } from '../lib/changelog.mts'
 import { REPO_ROOT } from '../paths.mts'
 import { fetchPublishedVersion } from '../publish-infra/cargo/registry.mts'
-import { readCargoPackage } from '../publish-infra/cargo/shared.mts'
+import { readPublishableCargoPackages } from '../publish-infra/cargo/shared.mts'
 import { fetchLatestPublishedVersion } from '../publish-infra/npm/registry.mts'
 import { isMainModule } from '../_shared/is-main-module.mts'
 
@@ -122,32 +123,40 @@ async function checkNpm(): Promise<void> {
 }
 
 /**
- * The crates.io twin. The single publishable crate's version (resolved via
+ * The crates.io twin. Every publishable crate's version (resolved via
  * `cargo metadata`, so `[workspace.package]` inheritance is applied) must not be
- * more than one release ahead of what published on crates.io. Fail-OPEN when
- * there is no Cargo.toml, no cargo toolchain, no publishable package, an
- * ambiguous multi-crate workspace (the release path disambiguates with
- * `--package`), or the registry is unreachable — a skip, never a false-fail.
+ * more than one release ahead of what that crate published on crates.io.
+ * Fail-OPEN when there is no Cargo.toml, no cargo toolchain, no publishable
+ * package, or `cargo metadata` is unreadable — a skip, never a false-fail.
  */
 async function checkCargo(): Promise<void> {
   if (!existsSync(path.join(REPO_ROOT, 'Cargo.toml'))) {
     return
   }
-  let name: string
-  let version: string
-  try {
-    ;({ name, version } = await readCargoPackage())
-  } catch {
+  // Fail-open (skip) on no cargo toolchain / unparseable metadata.
+  const packages = await readPublishableCargoPackages().catch(() => undefined)
+  if (!packages) {
     return
   }
-  const published = await fetchPublishedVersion(name)
-  const result = evaluateVersionAhead({
-    manifestVersion: version,
-    publishedVersion: published,
-  })
-  if (!result.ok) {
-    logger.fail(`version-is-not-ahead-of-published (cargo): ${result.reason}`)
-    process.exitCode = 1
+  // Every publishable crate is checked against ITS OWN crates.io history; the
+  // reads are independent, so run them together.
+  const checked = await Promise.all(
+    packages.map(async pkg => ({
+      name: pkg.name,
+      result: evaluateVersionAhead({
+        manifestVersion: pkg.version,
+        publishedVersion: await fetchPublishedVersion(pkg.name),
+      }),
+    })),
+  )
+  for (let i = 0, { length } = checked; i < length; i += 1) {
+    const entry = checked[i]!
+    if (!entry.result.ok) {
+      logger.fail(
+        `version-is-not-ahead-of-published (cargo:${entry.name}): ${entry.result.reason}`,
+      )
+      process.exitCode = 1
+    }
   }
 }
 

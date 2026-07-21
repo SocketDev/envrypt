@@ -7,8 +7,8 @@
  *   suffix at publish). This pairs the fleet memory "agent triggers releases via
  *   the gated publish script; the script owns the bump" with an enforcer.
  *   Enrollment: a publishable manifest — for npm, `private` is not true AND
- *   `publishConfig` is declared; for a Rust crate, the single publishable
- *   package `cargo metadata` resolves (anything not `publish = false`).
+ *   `publishConfig` is declared; for Rust, every publishable crate `cargo
+ *   metadata` resolves (anything not `publish = false`), each checked in turn.
  *   Non-publishable repos (apps, tools, the wheelhouse itself) no-op. PASS
  *   when: not enrolled; OR the version carries a prerelease/build suffix (the
  *   hint); OR the version is bare BUT HEAD is the release-bump commit (`chore:
@@ -28,7 +28,7 @@ import { getDefaultLogger } from '@socketsecurity/lib-stable/logger/default'
 import { spawnSync } from '@socketsecurity/lib-stable/process/spawn/child'
 
 import { REPO_ROOT } from '../paths.mts'
-import { readCargoPackage } from '../publish-infra/cargo/shared.mts'
+import { readPublishableCargoPackages } from '../publish-infra/cargo/shared.mts'
 import { isMainModule } from '../_shared/is-main-module.mts'
 
 const logger = getDefaultLogger()
@@ -158,21 +158,31 @@ async function checkCargo(quiet: boolean): Promise<void> {
   if (!existsSync(path.join(REPO_ROOT, 'Cargo.toml'))) {
     return
   }
-  let version: string
-  try {
-    ;({ version } = await readCargoPackage())
-  } catch {
+  // Fail-open (skip) on no cargo toolchain / unparseable metadata.
+  const packages = await readPublishableCargoPackages().catch(() => undefined)
+  if (!packages) {
     return
   }
-  report(
-    evaluateVersionHint({
-      hasPublishConfig: true,
-      headSubject: readHeadSubject(REPO_ROOT),
-      isPrivate: false,
-      version,
-    }),
-    quiet,
-  )
+  const headSubject = readHeadSubject(REPO_ROOT)
+  // The hint verdict depends only on the version string, so check each DISTINCT
+  // version once (a workspace usually shares one `[workspace.package]` version).
+  const seen = new Set<string>()
+  for (let i = 0, { length } = packages; i < length; i += 1) {
+    const { version } = packages[i]!
+    if (seen.has(version)) {
+      continue
+    }
+    seen.add(version)
+    report(
+      evaluateVersionHint({
+        hasPublishConfig: true,
+        headSubject,
+        isPrivate: false,
+        version,
+      }),
+      quiet,
+    )
+  }
 }
 
 async function main(): Promise<void> {
