@@ -433,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "envrypt"
-version = "0.1.0"
+version = "0.1.0-prerelease"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -461,7 +461,7 @@ dependencies = [
 
 [[package]]
 name = "envrypt-conformance"
-version = "0.1.0"
+version = "0.1.0-prerelease"
 dependencies = [
  "envrypt",
  "indexmap",
@@ -1046,7 +1046,7 @@ dependencies = [
 
 [[package]]
 name = "test-support"
-version = "0.1.0"
+version = "0.1.0-prerelease"
 dependencies = [
  "aes-gcm",
  "rand_core",

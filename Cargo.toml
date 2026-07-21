@@ -10,7 +10,7 @@ exclude = ["fuzz"]
 # are the real frozen compat contract). MIT-licensed. Toolchain: the fleet
 # nightly pin in rust-toolchain.toml.
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-prerelease"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/SocketDev/envrypt"
