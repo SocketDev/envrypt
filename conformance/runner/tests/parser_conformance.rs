@@ -55,8 +55,25 @@ impl ParsesTo for CoreParsesTo {
 /// MACHINE cases exercise the env-precondition merge.
 #[test]
 fn tier1_spec_cases_pass_against_envrypt() {
-  let cases = load_spec_cases(&spec_cases_path()).expect("spec.json loads");
-  assert_eq!(cases.len(), 88);
+  let all = load_spec_cases(&spec_cases_path()).expect("spec.json loads");
+  assert_eq!(all.len(), 88);
+
+  // Command-substitution cases assert POSIX-shell output. envrypt runs `$(…)`
+  // through the platform shell exactly as Node's `execSync` does — `/bin/sh -c`
+  // on POSIX, `cmd.exe /c` on Windows — so on Windows `$(echo "$VAR")` yields
+  // the literal (cmd never expands `$VAR`), which matches Node on Windows but
+  // not the POSIX golden. Skip them on Windows; POSIX runners cover all 88.
+  let skip_cmd_sub = cfg!(windows);
+  let cases: Vec<SpecCase> = all
+    .into_iter()
+    .filter(|c| !(skip_cmd_sub && c.input.contains("$(")))
+    .collect();
+  if skip_cmd_sub {
+    eprintln!(
+      "conformance: skipped {} POSIX-shell command-substitution case(s) on Windows (cmd.exe != /bin/sh)",
+      88 - cases.len()
+    );
+  }
 
   let failures = run_spec_suite(
     &cases,
