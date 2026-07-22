@@ -1,7 +1,7 @@
 # cargo-fuzz nightly job. Separate from the main Rust CI (`rust.yml`), which this
-# file never touches. Three targets (parse_pipeline / ecies_decrypt /
-# upsert_roundtrip in the `fuzz/` standalone workspace) run 10 CPU-min each on a
-# corpus cached between runs.
+# file never touches. Five targets (parse_pipeline / ecies_decrypt /
+# upsert_roundtrip / crypto_v3_decrypt / sockeye_decode in the `fuzz/` standalone
+# workspace) run 10 CPU-min each on a corpus cached between runs.
 #
 # On PRs/pushes that touch fuzzable code: a fast BUILD job (all targets compile via
 # cargo-fuzz) + the "no unsafe in envrypt without a // FUZZ: annotation" lint + a
@@ -73,7 +73,7 @@ jobs:
         run: python3 fuzz/seed-corpus.py
       - name: smoke run (60 s/target over the seed corpus)
         run: |
-          for t in parse_pipeline ecies_decrypt upsert_roundtrip; do
+          for t in parse_pipeline ecies_decrypt upsert_roundtrip crypto_v3_decrypt sockeye_decode; do
             bash fuzz/run.sh "$t" 60
           done
 
@@ -84,7 +84,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [parse_pipeline, ecies_decrypt, upsert_roundtrip]
+        target: [parse_pipeline, ecies_decrypt, upsert_roundtrip, crypto_v3_decrypt, sockeye_decode]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
