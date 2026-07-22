@@ -59,10 +59,48 @@ jobs:
         run: cargo fmt --all --check
       - name: clippy (all targets, all features, deny warnings)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: test (workspace, all features)
-        run: cargo test --workspace --all-features
-      - name: doctests
-        run: cargo test --doc -p envrypt
+      # Network-off unit tests (#68): run the test binaries inside a network
+      # namespace with only loopback up, so any real outbound call fails while
+      # localhost fixture servers still work — the compiled-language equivalent
+      # of the JS/TS `nock.disableNetConnect()` gate. Deps are pre-fetched online
+      # first; the sandbox only wraps the test *run*. Fail-closed: if no namespace
+      # can be created the job errors, never silently runs tests with the network
+      # up. See docs/agents.md/fleet/no-live-network-in-tests.md.
+      - name: prepare + verify network-off sandbox
+        run: |
+          set -euo pipefail
+          # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor;
+          # relax it on this ephemeral runner (passwordless sudo is present).
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 >/dev/null 2>&1 || true
+          fi
+          if ! unshare --map-root-user --net true 2>/dev/null; then
+            echo "::error::network-off: unprivileged net namespace unavailable on this runner; refusing to run tests with the network up." >&2
+            exit 1
+          fi
+          cat > "${RUNNER_TEMP}/run-offline.sh" <<'OFFLINE'
+          #!/usr/bin/env bash
+          # Run "$@" with external network disabled — fresh net namespace, loopback
+          # only. Loopback is up so localhost fixture servers work; there is no
+          # route off-box, so any real outbound call fails.
+          set -euo pipefail
+          exec unshare --map-root-user --net -- \
+            bash -c 'ip link set lo up 2>/dev/null || true; exec "$@"' _ "$@"
+          OFFLINE
+          chmod +x "${RUNNER_TEMP}/run-offline.sh"
+          # Prove the sandbox actually blocks egress before trusting it: a reach
+          # to a public host MUST fail inside the namespace.
+          if "${RUNNER_TEMP}/run-offline.sh" timeout 5 curl -sS -o /dev/null https://example.com 2>/dev/null; then
+            echo "::error::network-off self-check: reached example.com inside the sandbox — egress is NOT blocked." >&2
+            exit 1
+          fi
+          echo "network-off: verified — egress blocked, loopback available."
+      - name: pre-fetch deps (online, before the sandbox)
+        run: cargo fetch --locked
+      - name: test (workspace, all features — network-off)
+        run: '"${RUNNER_TEMP}/run-offline.sh" cargo test --workspace --all-features --offline'
+      - name: doctests (network-off)
+        run: '"${RUNNER_TEMP}/run-offline.sh" cargo test --doc -p envrypt --offline'
       - name: examples build
         run: cargo build --examples -p envrypt
       - name: bench build (cargo bench --no-run, default features)
