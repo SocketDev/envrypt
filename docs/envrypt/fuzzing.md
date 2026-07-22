@@ -18,7 +18,7 @@ the 3 lines above it, naming the fuzz target that exercises the path.
   rule does not apply. The lint scopes the exemption precisely to `#[cfg(test)]`
   regions (module or fn, tracked by brace depth); every other line stays gated.
   Example: `sockeye`'s child-process test harness uses raw `libc::{pipe, fork,
-  dup2, waitpid, …}` calls under `#[cfg(test)]` — those are exempt, while the
+dup2, waitpid, …}` calls under `#[cfg(test)]` — those are exempt, while the
   production `from_raw_fd` below is annotated.
 - The one shipped `unsafe` is `sockeye::read_pipe`'s
   `File::from_raw_fd(3)` — taking ownership of the inherited Sockeye descriptor.
