@@ -106,6 +106,26 @@ jobs:
       - name: bench build (cargo bench --no-run, default features)
         run: cargo bench --no-run -p envrypt
 
+  # Cross-platform compile gate: the envrypt LIBRARY must build on Windows. Every
+  # unix-only path — sockeye pipe IPC (fork/pipe/from_raw_fd), fsio permission
+  # bits, the unix keychain backends, and unix shell exec — is cfg(unix)-gated
+  # with a cfg(windows)/cfg(not(unix)) counterpart. This job keeps that gating
+  # honest: a newly-added ungated unix API fails the Windows build here instead of
+  # shipping a crate that only compiles on unix. Compile-only (no test run — the
+  # sockeye test harness uses raw unix syscalls under #[cfg(test)]).
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: cargo check (envrypt library, all features, windows-msvc)
+        run: cargo check -p envrypt --all-features
+
   # Library-level parse conformance: the tier-1 spec corpus (88 spec cases) + the
   # case-28 encoding slice, asserted through envrypt's parse pipeline. The corpus is
   # fully checked in and self-contained; frozen crypto/interop vector checks run in
