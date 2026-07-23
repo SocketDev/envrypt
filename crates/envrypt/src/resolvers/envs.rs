@@ -495,6 +495,10 @@ pub fn envs(
   process_env: &mut IndexMap<String, String>,
   on_status: &mut dyn FnMut(&str),
 ) -> EnvsOutput {
+  #[expect(
+    clippy::disallowed_methods,
+    reason = "public API boundary: `options.cwd = None` documents falling back to the process cwd (dotenvx parity)"
+  )]
   let cwd = options
     .cwd
     .clone()
@@ -666,6 +670,10 @@ pub fn config(
   process_env: &mut IndexMap<String, String>,
   logger: &mut Logger,
 ) -> Result<ConfigResult, RowError> {
+  #[expect(
+    clippy::disallowed_methods,
+    reason = "public API boundary: `options.cwd = None` documents falling back to the process cwd (dotenvx parity)"
+  )]
   let cwd = options
     .cwd
     .clone()

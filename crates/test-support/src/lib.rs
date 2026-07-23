@@ -108,6 +108,10 @@ pub struct CwdGuard {
 
 impl CwdGuard {
   /// Change the process cwd to `dir`, restoring the previous cwd on drop.
+  #[expect(
+    clippy::disallowed_methods,
+    reason = "CwdGuard is the sanctioned cwd mutator: it serializes via CWD_LOCK and restores on drop"
+  )]
   pub fn change_to<P: AsRef<Path>>(dir: P) -> io::Result<Self> {
     let guard = lock(&CWD_LOCK);
     let original = std::env::current_dir()?;
@@ -120,6 +124,10 @@ impl CwdGuard {
 }
 
 impl Drop for CwdGuard {
+  #[expect(
+    clippy::disallowed_methods,
+    reason = "CwdGuard is the sanctioned cwd mutator: it restores the original cwd while still holding CWD_LOCK"
+  )]
   fn drop(&mut self) {
     let _ = std::env::set_current_dir(&self.original);
   }
@@ -467,6 +475,10 @@ mod tests {
   }
 
   #[test]
+  #[expect(
+    clippy::disallowed_methods,
+    reason = "asserting CwdGuard's cwd mutation requires reading the process cwd"
+  )]
   fn cwd_guard_changes_and_restores() {
     let before = with_cwd_lock(|| std::env::current_dir().unwrap());
     let tmp = tempfile::tempdir().unwrap();
