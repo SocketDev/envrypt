@@ -90,8 +90,6 @@ saveExact: true
 trustPolicy: 'no-downgrade'
 minimumReleaseAgeExclude:
   - '@sdxgen/*'
-  - '@socketaddon/*'
-  - '@socketbin/*'
   - '@socketoverride/*'
   - '@socketregistry/*'
   - '@socketsecurity/*'
