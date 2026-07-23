@@ -84,7 +84,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [parse_pipeline, ecies_decrypt, upsert_roundtrip, crypto_v3_decrypt, sockeye_decode]
+        target:
+          [
+            parse_pipeline,
+            ecies_decrypt,
+            upsert_roundtrip,
+            crypto_v3_decrypt,
+            sockeye_decode,
+          ]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
