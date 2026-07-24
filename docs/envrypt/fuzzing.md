@@ -99,8 +99,8 @@ code.
    `parse_pipeline` target additionally `compile_error!`s under `not(fuzzing)`
    so it can never be built without the stub.
 2. **`parse::expand` lowered iteration cap + output-size guard.** A
-   self-reinserting expansion (a `${…}`/`$'`/`$&` value that re-inserts itself)
-   has two hostile members. The ADDITIVE member grows the result about linearly
+   self-reinserting expansion — a `${…}`/`$'`/`$&` value that re-inserts
+   itself — has two hostile members. The ADDITIVE member grows the result about linearly
    per pass and does O(cap²) work: at the production
    `MAX_EXPAND_ITERATIONS = 10_000` a single exec runs for tens of seconds even
    on a ≤128-byte input (measured 35 s uninstrumented; minutes under ASan),
@@ -108,9 +108,10 @@ code.
    the identical scan → look-up → replace path is fuzzed on grown strings fast.
    The MULTIPLICATIVE member (an after-match/whole-match reinsertion that
    duplicates a still-`${…}`-bearing tail) grows the result exponentially per
-   pass and OOM-aborts the fuzzer at ~31 passes regardless of any iteration cap
-   (a past run recorded a 2.4 GB single allocation). So under `--cfg fuzzing` a
-   companion output-size guard, `parse::expand::FUZZ_MAX_EXPAND_OUTPUT_BYTES`
+   pass and OOM-aborts the fuzzer at ~31 passes regardless of any iteration
+   cap; a past run recorded a 2.4 GB single allocation. So under
+   `--cfg fuzzing` a companion output-size guard,
+   `parse::expand::FUZZ_MAX_EXPAND_OUTPUT_BYTES`
    (16 KiB), truncates and breaks once the intermediate result exceeds the
    budget. Production keeps the 10 000 cap and unbounded output — that envelope
    is deliberate, documented behavior of the frozen expansion semantics.

@@ -23,7 +23,7 @@ strings).
 
 The value form of an encrypted `.env` entry. ECIES (public-key encryption that
 derives a fresh shared key per value) over secp256k1, HKDF-SHA256, AES-256-GCM
-with a 16-byte nonce (a number used once per encryption).
+with a 16-byte nonce — a number used once per encryption.
 
 ### 1.1 String form
 

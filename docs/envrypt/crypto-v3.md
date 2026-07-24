@@ -80,7 +80,7 @@ Key schedule:
 5. Compute the commitment (below).
 
 Detection: a v3 payload's first byte is `0x03`; a legacy v1 `encrypted:` payload
-starts with `0x04` (a SEC1 point prefix), so the two never collide.
+starts with `0x04`, a SEC1 point prefix, so the two never collide.
 
 ## Passphrase mode (mode = 0x02) — the `locked:` value
 
