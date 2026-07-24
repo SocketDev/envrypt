@@ -1,5 +1,5 @@
 {
-  "name": "hook-marketplace-comment-guard",
+  "name": "socket-oxlint-rule-no-required-in-options-bag",
   "private": true,
   "type": "module",
   "main": "./index.mts",
