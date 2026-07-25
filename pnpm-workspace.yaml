@@ -59,6 +59,9 @@ overrides:
   'hasown': 'npm:@socketregistry/hasown@1.0.7'
   'iconv-lite': '0.7.2'
   'isexe@>=3': '4.0.0'
+  # GHSA-pm4m-ph32-ghv5: exponential parse time in js-yaml 5.x flow
+  # collections; 4.x line via cosmiconfig is unaffected, leave it alone.
+  'js-yaml@>=5.0.0 <5.2.2': '5.2.2'
   'lru-cache@>=10': '11.3.6'
   'magic-string': '1.0.0'
   'mime-db': '1.54.0'
@@ -168,6 +171,8 @@ minimumReleaseAgeExclude:
   # exact-pinned so future versions re-soak.
   # published: 2026-07-19 | removable: 2026-07-26
   - 'verkit@0.1.2'
+  # published: 2026-07-23 | removable: 2026-07-30
+  - 'js-yaml@5.2.2'
 
 allowBuilds:
   '@socketsecurity/sdk': false
