@@ -26,12 +26,15 @@ value and file formats are the frozen compatibility contract.
 
 ### Fixed
 
+- **`conformance`** — skip POSIX-shell command-substitution cases on Windows
+- **`paths`** — `.env` file paths resolve correctly on Windows.
+- **`secrets`** — resolver key material is zeroized after use.
+- **`sockeye`** — one-shot credentials are read through sockeye, the safe local path.
+
+### Internal
+
 - **`deps`** — absorb the fleet catalog heal
 - **`fleet`** — restore fetch-fleet-bundle to the v1.0.14 manifest bytes
 - **`deps`** — override js-yaml to 5.2.2 for GHSA-pm4m-ph32-ghv5
 - **`deps`** — add missing lockfile importers for fleet hook packages
 - **`lint`** — scope expect markers for disallowed current\_dir at cwd-contract sites
-- **`conformance`** — skip POSIX-shell command-substitution cases on Windows
-- **`paths`** — `.env` file paths resolve correctly on Windows.
-- **`secrets`** — resolver key material is zeroized after use.
-- **`sockeye`** — one-shot credentials are read through sockeye, the safe local path.
