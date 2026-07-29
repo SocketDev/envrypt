@@ -39,11 +39,12 @@ use k256::elliptic_curve::sec1::ToEncodedPoint;
 use rand_core::{OsRng, RngCore};
 use sha2::Sha256;
 
-// Re-exported so the keyring can store already-parsed keys: a ring entry holds a
-// parsed `SecretKey` plus its derived compressed-pubkey hex, and per-value
-// decryption takes `&SecretKey`. `PublicKey` is public so a caller encrypting many
-// values against one recipient parses it once via [`parse_public_key`] and calls
-// [`encrypt_with_key`], skipping the per-value hex-decode and point-parse.
+// Re-exported so a caller can hoist the parse out of a loop. `SecretKey` is what
+// [`parse_private_key`] returns and what [`decrypt_with_key`] takes; `PublicKey`
+// is what [`parse_public_key`] returns and what [`encrypt_with_key`] takes. Both
+// skip the per-value hex-decode and point-parse when many values share one key.
+// The keyring itself stores hex, not parsed keys (`keyring::Ring` is
+// `IndexMap<String, String>`).
 pub use k256::{PublicKey, SecretKey};
 
 /// The value prefix that marks an ECIES-encrypted string.
@@ -206,7 +207,8 @@ pub fn parse_private_key(private_key_hex: &str) -> Result<SecretKey, CryptoError
 }
 
 /// The derived compressed public key (66-hex) for an already-parsed secret key.
-/// The keyring caches this next to the `SecretKey`.
+/// One EC base-point multiplication; the keyring calls it once per private key
+/// while building the ring.
 pub fn public_key_hex(secret: &SecretKey) -> String {
   hex_encode(secret.public_key().to_encoded_point(true).as_bytes())
 }
