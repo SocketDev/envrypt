@@ -30,11 +30,16 @@ const PRIVATE_KEYS: [&str; 10] = [
   "957cd87cfaba4bd19f86c0d89bd141ee607c33af2b11790218e287b61e7e3da6",
 ];
 
-/// Render the fixed `.env.keys` corpus (10 `DOTENV_PRIVATE_KEY_<i>` entries).
+/// Render the fixed `.env.keys` corpus (10 `ENVRYPT_PRIVATE_KEY_<i>` entries).
+///
+/// The names must match the default [`KeyNaming`] private-key prefix, which
+/// `keyring_local` tests with `starts_with`. A name outside the family is skipped,
+/// so a mismatched corpus would leave the ring empty and the bench would time file
+/// I/O alone; [`bench_keyring`] asserts the derive count to keep that honest.
 fn keys_file_contents() -> String {
   let mut src = String::new();
   for (i, key) in PRIVATE_KEYS.iter().enumerate() {
-    src.push_str(&format!("DOTENV_PRIVATE_KEY_{i}=\"{key}\"\n"));
+    src.push_str(&format!("ENVRYPT_PRIVATE_KEY_{i}=\"{key}\"\n"));
   }
   src
 }
@@ -56,6 +61,15 @@ fn bench_keyring(c: &mut Criterion) {
     seed_ring: IndexMap::new(),
     naming: envrypt::conventions::keynames::default_key_naming(),
   };
+
+  // `Throughput::Elements(10)` only means something if the build really derives
+  // ten public keys, so prove it before measuring.
+  assert_eq!(
+    keyring_local(&opts).len(),
+    PRIVATE_KEYS.len(),
+    "the corpus key names must match the configured private-key prefix, or the \
+     bench measures file I/O instead of EC derivation"
+  );
 
   let mut group = c.benchmark_group("keyring");
   group.throughput(Throughput::Elements(PRIVATE_KEYS.len() as u64));
