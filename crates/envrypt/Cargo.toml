@@ -21,12 +21,12 @@ readme = "README.md"
 bench = false
 
 # Fuzz targets built by cargo-fuzz set the build-wide `--cfg fuzzing`. Under that
-# cfg, `parse::evaluate` stubs command substitution (never spawns a shell on fuzz
-# bytes) and `crypto` exposes a raw-wire-payload decrypt entry. Declaring the cfg
-# here keeps `#[cfg(fuzzing)]` out of the `unexpected_cfgs` warning (clippy
-# `-D warnings` under `--all-features` would otherwise fail). No default or normal
-# build sets it, so production and `cargo test`/`--all-features` behavior is
-# byte-for-byte unchanged.
+# cfg, `parse::expand` shrinks its iteration cap and output byte budget to
+# fuzz-sized values, and `crypto` exposes a raw-wire-payload decrypt entry.
+# Declaring the cfg here keeps `#[cfg(fuzzing)]` out of the `unexpected_cfgs`
+# warning (clippy `-D warnings` under `--all-features` would otherwise fail). No
+# default or normal build sets it, so production and `cargo test`/`--all-features`
+# behavior is byte-for-byte unchanged.
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
@@ -119,14 +119,6 @@ fancy-regex = { workspace = true }
 regex = { workspace = true }
 indexmap = { workspace = true }
 memchr = { workspace = true }
-
-# Precommit/prebuild gitignore matching: `.env*` files are matched against
-# `.gitignore`/`.dockerignore`. The `ignore` crate's `Gitignore` builder
-# implements the gitignore spec, checked byte-for-byte against the reference
-# behavior on the precommit/prebuild pattern set (`services::precommit` tests).
-# Pure-Rust (globset/regex-automata/walkdir/memchr); no
-# openssl-sys/tokio/reqwest/hyper, so the default-build deps gate stays green.
-ignore = "0.4"
 
 # serde_json matches Node's `JSON.stringify`/`JSON.parse` byte-for-byte for the
 # envs resolver's debug line, the run action's options JSON, and the

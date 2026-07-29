@@ -163,7 +163,7 @@ jobs:
           set -euo pipefail
           # The audited pure-Rust dependency set (linux/default features). ADD a crate
           # here only after auditing it (no HTTP/async/openssl/CLI machinery).
-          # v3 value-format crypto (docs/envrypt/CRYPTO-V3.md) adds: argon2 (+blake2,
+          # v3 value-format crypto (docs/envrypt/crypto-v3.md) adds: argon2 (+blake2,
           # Argon2id KDF), chacha20poly1305 (+chacha20/poly1305, XChaCha20 AEAD),
           # x25519-dalek (+curve25519-dalek and its derive), and the zeroize derive
           # closure (zeroize_derive → proc-macro2/quote/syn/unicode-ident, compile-time
@@ -180,16 +180,12 @@ jobs:
           bit-vec
           blake2
           block-buffer
-          bstr
           cfg-if
           chacha20
           chacha20poly1305
           cipher
           const-oid
           cpufeatures
-          crossbeam-deque
-          crossbeam-epoch
-          crossbeam-utils
           crypto-bigint
           crypto-common
           ctr
@@ -205,18 +201,15 @@ jobs:
           generic-array
           getrandom
           ghash
-          globset
           group
           hashbrown
           hkdf
           hmac
-          ignore
           indexmap
           inout
           itoa
           k256
           libc
-          log
           memchr
           opaque-debug
           password-hash
@@ -230,7 +223,6 @@ jobs:
           regex-automata
           regex-syntax
           salsa20
-          same-file
           scrypt
           sec1
           serde_core
@@ -241,7 +233,6 @@ jobs:
           typenum
           unicode-ident
           universal-hash
-          walkdir
           x25519-dalek
           zeroize
           zeroize_derive
