@@ -191,6 +191,52 @@ fn system_keychain_policy_keeps_plaintext_loads_local() {
   assert_eq!(loaded.get("PLAIN_KEY"), Some("hello"));
 }
 
+/// `inject = true` writes the resolved map into `std::env`, where every child
+/// and grandchild inherits it. A `.env` line named after a private key must not
+/// ride that path: the resolver redacts the private-key family from what it
+/// returns, so there is nothing for `inject` to write.
+///
+/// The companion resolver test
+/// (`resolvers::envs::config_test::a_planted_private_key_line_cannot_carry_the_real_key_out`)
+/// covers the sharper case, where process-env precedence would swap the planted
+/// value for the real key — the shape a Sockeye-delivered key takes, since
+/// `config` places that key in the same map.
+#[test]
+fn an_injecting_load_puts_no_private_key_into_std_env() {
+  let dir = tempfile::tempdir().unwrap();
+  let env_path = write_env(
+    dir.path(),
+    ".env",
+    "ENVRYPT_PRIVATE_KEY_INJECTPROBE=planted\nINJECT_PROBE_ORDINARY=ordinary\n",
+  );
+
+  let loaded = config(&LoadOptions {
+    path: Some(vec![env_path]),
+    inject: true,
+    ..Default::default()
+  })
+  .expect("plaintext load");
+
+  // Restore the process env before asserting, so a failure cannot leak the
+  // planted variable into the rest of the suite.
+  let injected_ordinary = std::env::var_os("INJECT_PROBE_ORDINARY");
+  let injected_key = std::env::var_os("ENVRYPT_PRIVATE_KEY_INJECTPROBE");
+  std::env::remove_var("INJECT_PROBE_ORDINARY");
+  std::env::remove_var("ENVRYPT_PRIVATE_KEY_INJECTPROBE");
+
+  assert_eq!(
+    injected_ordinary.as_deref(),
+    Some(std::ffi::OsStr::new("ordinary")),
+    "inject really ran, so the negative assertion below is not vacuous"
+  );
+  assert!(
+    injected_key.is_none(),
+    "a private-key-named value must never reach std::env"
+  );
+  assert!(loaded.get("ENVRYPT_PRIVATE_KEY_INJECTPROBE").is_none());
+  assert_eq!(loaded.get("INJECT_PROBE_ORDINARY"), Some("ordinary"));
+}
+
 // The curated root surface writes the v3 format and reads both generations
 // (crypto-v3.md Compatibility): `envrypt::encrypt` emits a 0x03-versioned
 // payload, `envrypt::decrypt` opens it bound to its variable name, and the same

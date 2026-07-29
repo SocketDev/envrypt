@@ -33,6 +33,7 @@ use crate::resolvers::vault::{is_vault_reference, resolve_vault_references};
 use indexmap::{IndexMap, IndexSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use zeroize::Zeroize;
 
 /// A row-level error. A row carries either a structured error (with
 /// `messageWithHelp`) or a raw io/provider error whose `messageWithHelp` is
@@ -416,12 +417,38 @@ fn parse_row(
   let output = parse_with_ring(src, &parse_options);
   clear_ring(&mut ring);
 
-  let parsed = flatten(&output.parsed);
+  let mut parsed = flatten(&output.parsed);
   row.injected = flatten(&output.injected);
   row.existed = flatten(&output.existed);
   row.errors = decrypt_errors(&parsed, &output.errors);
+  // The row's values feed the next row's ring, so the private key stays in the
+  // internal `process_env` — and only there.
   inject(process_env, &parsed);
+  // A `.env` line named after a private key would otherwise carry the resolved
+  // key out of this row: process-env precedence replaces the planted value with
+  // the real one, and the row is what `config()` merges, logs, returns, and
+  // injects into `std::env`. Whoever writes the `.env` is exactly the adversary
+  // the v3 AAD binding defends against, so redact the key family from every
+  // outward-facing map, using the same [`KeyNaming`] predicate the keyring reads
+  // keys with.
+  redact_private_keys(&mut parsed, &options.naming);
+  redact_private_keys(&mut row.injected, &options.naming);
+  redact_private_keys(&mut row.existed, &options.naming);
   row.parsed = Some(parsed);
+}
+
+/// Drops every private-key-named entry from `map`, zeroizing the removed values.
+fn redact_private_keys(map: &mut IndexMap<String, String>, naming: &KeyNaming) {
+  let names: Vec<String> = map
+    .keys()
+    .filter(|name| naming.is_private_key_name(name))
+    .cloned()
+    .collect();
+  for name in names {
+    if let Some(mut value) = map.shift_remove(&name) {
+      value.zeroize();
+    }
+  }
 }
 
 /// Reads and parses one env file into a row.

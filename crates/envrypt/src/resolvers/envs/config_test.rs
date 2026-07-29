@@ -183,3 +183,87 @@ fn returns_errors_thrown_from_reading_file() {
   assert_eq!(result.error.expect("error").code(), "MISSING_ENV_FILE");
   assert!(result.parsed.is_empty());
 }
+
+/// A `.env` line named after the private key is an exfiltration attempt: the
+/// process-env precedence rule swaps the planted value for the real key, and the
+/// result would otherwise be returned to the caller and injected into `std::env`,
+/// where every grandchild inherits it. Whoever writes the `.env` is exactly the
+/// adversary the v3 AAD binding defends against, so the key family never leaves
+/// the resolver.
+#[test]
+fn a_planted_private_key_line_cannot_carry_the_real_key_out() {
+  let real_key = "1".repeat(64);
+  let dir = tempfile::tempdir().unwrap();
+  let env_path = dir.path().join(".env");
+  std::fs::write(
+    &env_path,
+    "ENVRYPT_PRIVATE_KEY=decoy\nENVRYPT_PRIVATE_KEY_STAGING=decoy2\nBASIC=basic\n",
+  )
+  .unwrap();
+
+  let mut pe = env_map(&[("ENVRYPT_PRIVATE_KEY", &real_key)]);
+  let result = run_config_paths(&[&env_path.to_string_lossy()], &mut pe, false);
+
+  assert_eq!(
+    result.parsed.get("BASIC").map(String::as_str),
+    Some("basic"),
+    "an ordinary key still resolves"
+  );
+  for name in ["ENVRYPT_PRIVATE_KEY", "ENVRYPT_PRIVATE_KEY_STAGING"] {
+    assert!(
+      !result.parsed.contains_key(name),
+      "{name} must not reach the returned map"
+    );
+  }
+  assert!(
+    !result.parsed.values().any(|value| value == &real_key),
+    "no returned value may carry the private key"
+  );
+}
+
+/// The same redaction under `overload`, where the planted value — not the real
+/// key — is what the file contributes. A private key still never leaves.
+#[test]
+fn a_planted_private_key_line_is_redacted_under_overload() {
+  let dir = tempfile::tempdir().unwrap();
+  let env_path = dir.path().join(".env");
+  std::fs::write(&env_path, "ENVRYPT_PRIVATE_KEY=planted\nBASIC=basic\n").unwrap();
+
+  let mut pe = env_map(&[]);
+  let result = run_config_paths(&[&env_path.to_string_lossy()], &mut pe, true);
+
+  assert_eq!(
+    result.parsed.get("BASIC").map(String::as_str),
+    Some("basic")
+  );
+  assert!(!result.parsed.contains_key("ENVRYPT_PRIVATE_KEY"));
+}
+
+/// The redaction follows the configured naming, not a hard-coded `ENVRYPT_`
+/// string — the same [`KeyNaming`] predicate the keyring reads keys with.
+#[test]
+fn redaction_follows_the_configured_key_naming() {
+  let dir = tempfile::tempdir().unwrap();
+  let env_path = dir.path().join(".env");
+  std::fs::write(
+    &env_path,
+    "APP_PRIVATE_KEY=planted\nENVRYPT_PRIVATE_KEY=not-a-key-under-this-naming\n",
+  )
+  .unwrap();
+
+  let mut pe = env_map(&[]);
+  let (_cap, mut logger) = quiet_logger();
+  let options = ConfigOptions {
+    path: Some(vec![env_path.to_string_lossy().into_owned()]),
+    naming: KeyNaming::from_prefix("APP_"),
+    ..Default::default()
+  };
+  let result = config(&options, &mut pe, &mut logger).unwrap();
+
+  assert!(!result.parsed.contains_key("APP_PRIVATE_KEY"));
+  assert_eq!(
+    result.parsed.get("ENVRYPT_PRIVATE_KEY").map(String::as_str),
+    Some("not-a-key-under-this-naming"),
+    "a name outside the configured family is an ordinary variable"
+  );
+}
