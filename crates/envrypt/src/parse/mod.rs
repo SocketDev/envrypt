@@ -1,21 +1,22 @@
 //! The full .env parse pipeline: scan → process-env precedence → decrypt (ring)
-//! → evaluate (command substitution) → expand (with `\$` unescape) →
-//! parsed/injected/existed/errors bookkeeping.
+//! → expand (with `\$` unescape) → parsed/injected/existed/errors bookkeeping.
+//!
+//! The pipeline spawns no child process: a `$(…)` sequence is ordinary text that
+//! flows through untouched, since neither expansion regex matches a `$` followed
+//! by `(`. This is a deliberate divergence from dotenvx, which shells out; see
+//! `conformance/README.md`.
 //!
 //! [`parse_with_ring`] is the core synchronous pipeline over a prebuilt keyring;
 //! [`public_key_hexes`] seeds that ring and orders decrypt attempts.
 
-pub mod evaluate;
 pub mod expand;
 pub mod scan;
 
-pub use evaluate::{evaluate, EvaluateOptions};
-pub use expand::{expand, ExpandOptions};
+pub use expand::{expand, ExpandError, ExpandOptions};
 pub use scan::{scan, scan_with, Quote, ScanEntry, ScanOptions};
 
 use indexmap::IndexMap;
 use std::borrow::Cow;
-use std::path::Path;
 
 /// Unescapes `\$` to `$`. Parse applies this to the expand result so an escaped
 /// dollar survives expansion as a literal `$`.
@@ -67,16 +68,17 @@ pub struct ParseOptions<'a> {
   /// seed). Insertion order (seeds first, then discovery order) drives the
   /// try-every-other-key fallback in [`try_decrypt`].
   pub ring: &'a IndexMap<String, String>,
-  /// Working directory for `$()` children. `None` inherits the process cwd.
-  pub cwd: Option<&'a Path>,
+  /// The byte budget for one expanded value; exceeding it is an
+  /// `EXPANSION_TOO_LARGE` error on that key.
+  pub max_expand_output_bytes: usize,
   /// The key-identifier naming used to detect the in-file public-key header when
   /// seeding decrypt-attempt order (default `ENVRYPT_`).
   pub naming: &'a crate::conventions::keynames::KeyNaming,
 }
 
 impl<'a> ParseOptions<'a> {
-  /// Defaults: no overload, no array, no filters, empty ring, inherited cwd,
-  /// default `ENVRYPT_` naming.
+  /// Defaults: no overload, no array, no filters, empty ring, the default
+  /// expansion budget, default `ENVRYPT_` naming.
   pub fn new(process_env: &'a IndexMap<String, String>) -> Self {
     ParseOptions {
       overload: false,
@@ -85,7 +87,7 @@ impl<'a> ParseOptions<'a> {
       ek: &[],
       process_env,
       ring: empty_ring(),
-      cwd: None,
+      max_expand_output_bytes: expand::DEFAULT_MAX_EXPAND_OUTPUT_BYTES,
       naming: crate::conventions::keynames::default_key_naming(),
     }
   }
@@ -149,6 +151,9 @@ pub fn parse_with_ring(src: &str, opts: &ParseOptions) -> ParseOutput {
   let mut existed: IndexMap<String, Vec<String>> = IndexMap::new();
   // Failed-decryption set: unique names in first-failure order.
   let mut failed: Vec<String> = Vec::new();
+  // Expansion budget overruns, in encounter order. Each is its own error: the
+  // key names the value whose expansion could not fit.
+  let mut errors: Vec<ParseError> = Vec::new();
 
   // Scan runs unfiltered; the ik/ek matchers gate decryption only.
   scan_with(src, &ScanOptions::default(), |entry| {
@@ -157,15 +162,15 @@ pub fn parse_with_ring(src: &str, opts: &ParseOptions) -> ParseOutput {
     let mut k = entry.value.to_string();
     let has_own = process_env.contains_key(name);
 
-    // Step 2: process-env precedence (key present).
+    // Process-env precedence: a key already present in the environment wins,
+    // unless `overload` flips it.
     if !opts.overload && has_own {
       k = process_env[name].clone();
     }
 
-    // Step 3.
     let was_encrypted = crate::crypto::is_encrypted(&k);
 
-    // Step 4: decrypt, gated by ik/ek (skip when the filters exclude the name).
+    // Decrypt, gated by ik/ek (skip when the filters exclude the name).
     if !ik_skips(name) {
       k = try_decrypt(opts.ring, &k, &public_keys, name);
       if was_encrypted && crate::crypto::is_encrypted(&k) && !failed.iter().any(|f| f == name) {
@@ -173,65 +178,51 @@ pub fn parse_with_ring(src: &str, opts: &ParseOptions) -> ParseOutput {
       }
     }
 
-    // Step 5.
     let still_encrypted = crate::crypto::is_encrypted(&k);
-    let mut evaled = false;
 
-    // Step 6: command substitution. Failures are swallowed, leaving the literal.
-    if !still_encrypted
-      && quote != Quote::Single
-      && (!has_own || process_env.get(name).map(String::as_str) == Some(k.as_str()))
-    {
-      let before = k.clone();
-      if let Ok(evaluated) = evaluate(
-        &k,
-        &EvaluateOptions {
-          process_env,
-          running_parsed: &running_parsed,
-          cwd: opts.cwd,
-        },
-      ) {
-        k = evaluated;
-      }
-      if before != k {
-        evaled = true;
-      }
-    }
-
-    // Step 7: expansion. Its gate tests truthiness (`!processEnv[name] ||
-    // overload`), where steps 2 and 6 test key presence.
+    // Expansion. Its gate tests TRUTHINESS (`!processEnv[name] || overload`),
+    // where the precedence gate above tests key PRESENCE — an empty
+    // pre-existing value wins there and still flows through expand here. A
+    // budget overrun records an error and leaves the unexpanded value in place,
+    // so a caller never receives a truncated one.
     let truthy_process_env = process_env.get(name).is_some_and(|v| !v.is_empty());
-    if !still_encrypted
-      && !evaled
-      && quote != Quote::Single
-      && (!truthy_process_env || opts.overload)
-    {
-      let expanded = expand(
+    if !still_encrypted && quote != Quote::Single && (!truthy_process_env || opts.overload) {
+      match expand(
         &k,
         &ExpandOptions {
           overload: opts.overload,
           process_env,
           running_parsed: &running_parsed,
           literals: &literals,
+          max_output_bytes: opts.max_expand_output_bytes,
         },
-      );
-      let resolved_owned = match resolve_escape_sequences(&expanded) {
-        Cow::Borrowed(_) => None,
-        Cow::Owned(resolved) => Some(resolved),
-      };
-      k = resolved_owned.unwrap_or(expanded);
+      ) {
+        Ok(expanded) => {
+          let resolved_owned = match resolve_escape_sequences(&expanded) {
+            Cow::Borrowed(_) => None,
+            Cow::Owned(resolved) => Some(resolved),
+          };
+          k = resolved_owned.unwrap_or(expanded);
+        }
+        Err(e) => errors.push(ParseError {
+          code: "EXPANSION_TOO_LARGE",
+          message: crate::errors::EnvryptError::expansion_too_large(name, e.max_output_bytes)
+            .message()
+            .to_string(),
+        }),
+      }
     }
 
-    // Step 8: record single-quoted literals; expand's literals-guard reads them.
+    // Record single-quoted literals; expand's literals-guard reads them.
     if quote == Quote::Single {
       literals.insert(name.to_string(), k.clone());
     }
 
-    // Step 9: runningParsed feeds later expansions and evaluate's child env.
+    // runningParsed feeds later lines' expansions.
     running_parsed.insert(name.to_string(), k.clone());
 
-    // Step 10: array mode pushes each occurrence; non-array overwrites in
-    // place, keeping the key's original position.
+    // Array mode pushes each occurrence; non-array overwrites in place, keeping
+    // the key's original position.
     if opts.array {
       parsed.entry(name.to_string()).or_default().push(k.clone());
     } else {
@@ -240,7 +231,7 @@ pub fn parse_with_ring(src: &str, opts: &ParseOptions) -> ParseOutput {
       slot.push(k.clone());
     }
 
-    // Step 11: injected/existed bookkeeping.
+    // injected/existed bookkeeping.
     if has_own && !opts.overload {
       let process_value = process_env[name].clone();
       if opts.array {
@@ -269,7 +260,6 @@ pub fn parse_with_ring(src: &str, opts: &ParseOptions) -> ParseOutput {
   });
 
   // Exactly one aggregated error when any key failed decryption.
-  let mut errors = Vec::new();
   if !failed.is_empty() {
     errors.push(ParseError {
       code: "DECRYPTION_FAILED",

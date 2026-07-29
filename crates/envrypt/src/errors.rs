@@ -20,12 +20,12 @@ pub const ISSUE_BY_CODE: &[(&str, &str)] = &[
     "https://github.com/SocketDev/envrypt/issues/new",
   ),
   (
-    "COMMAND_SUBSTITUTION_FAILED",
-    "https://github.com/SocketDev/envrypt/issues/532",
-  ),
-  (
     "DECRYPTION_FAILED",
     "https://github.com/SocketDev/envrypt/issues/757",
+  ),
+  (
+    "EXPANSION_TOO_LARGE",
+    "drop the self-reference from the value, or raise LoadOptions::max_expand_output_bytes",
   ),
   ("INVALID_COLOR", "must be 256 colors"),
   (
@@ -340,12 +340,17 @@ impl EnvryptError {
     )
   }
 
-  /// The `COMMAND_SUBSTITUTION_FAILED` error, thrown when command substitution
-  /// fails to evaluate. `message` is the child-process message, already trimmed.
-  pub fn command_substitution_failed(command: &str, message: &str) -> Self {
+  /// The `EXPANSION_TOO_LARGE` error, raised when expanding one `.env` value
+  /// would grow past its byte budget. A value that re-inserts itself (say
+  /// `SELF="${SELF}$'x"`) doubles on every expansion pass, so the budget is what
+  /// stops it; the value is reported, never truncated.
+  pub fn expansion_too_large(name: &str, max_output_bytes: usize) -> Self {
     Self::coded(
-      "COMMAND_SUBSTITUTION_FAILED",
-      format!("[COMMAND_SUBSTITUTION_FAILED] could not evaluate command '{command}': {message}"),
+      "EXPANSION_TOO_LARGE",
+      format!(
+        "[EXPANSION_TOO_LARGE] expanding '{name}' outgrew its budget: the expansion kept growing \
+         past {max_output_bytes} bytes, and a resolved value must fit within that budget"
+      ),
     )
   }
 

@@ -33,6 +33,18 @@ conformance/
                           through envrypt's parse pipeline.
 ```
 
+## Deliberate divergences from dotenvx
+
+The corpus is inherited from dotenvx, so a case whose golden value differs on
+purpose carries a `notes` field beginning `DIVERGENCE from dotenvx:`. Grep for
+that prefix to see the full list.
+
+- **`$(…)` command substitution is literal text** (cases `504`, `505`, `506`,
+  `601`). dotenvx shells each `$(…)` out through `execSync`. envrypt spawns no
+  child process while parsing, so a `.env` that an attacker can write cannot
+  reach a shell. The parens and the command word survive verbatim; an inner
+  `$VAR` still expands, because `$(` matches neither expansion alternative.
+
 ## Running it
 
 ```

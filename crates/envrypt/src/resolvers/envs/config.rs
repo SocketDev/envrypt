@@ -31,6 +31,9 @@ pub struct ConfigOptions<'a> {
   pub cwd: Option<PathBuf>,
   /// The key-identifier naming (default `ENVRYPT_`).
   pub naming: KeyNaming,
+  /// The byte budget for one expanded value. `None` →
+  /// [`crate::parse::expand::DEFAULT_MAX_EXPAND_OUTPUT_BYTES`].
+  pub max_expand_output_bytes: Option<usize>,
   /// Opt-in 1Password `op://` resolution. `Some(exec)` resolves every `op://`
   /// value through `op read` via this bounded-timeout [`Exec`] seam
   /// (fail-closed); `None` (the default) leaves `op://` strings verbatim, so
@@ -121,6 +124,7 @@ impl Default for ConfigOptions<'_> {
       home_dir: None,
       cwd: None,
       naming: KeyNaming::default(),
+      max_expand_output_bytes: None,
       op_exec: None,
       op_timeout: crate::resolvers::onepassword::DEFAULT_OP_TIMEOUT,
       bw_exec: None,
@@ -194,6 +198,7 @@ pub fn config(
     providers: options.providers,
     cwd: Some(cwd),
     naming: options.naming.clone(),
+    max_expand_output_bytes: options.max_expand_output_bytes,
   };
   let output = envs(&resolver_options, process_env, &mut |_| {});
 

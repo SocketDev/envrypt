@@ -4,25 +4,20 @@
 //! Raw bytes → the full file-ingestion path: encoding detection (UTF-16LE BOM
 //! sniff / utf8 / latin1 fallback — spec case `902_UTF16LE` proves the honest
 //! surface is raw bytes, NOT pre-validated UTF-8) → Node-parity decode to a
-//! `String` → scan → expand → the evaluate gate. Command substitution `$()` is
-//! stubbed to a deterministic pure function inside `parse::evaluate` (active
-//! because cargo-fuzz sets `--cfg fuzzing`) so fuzz-derived bytes are NEVER
-//! executed by a shell, while the real `EVAL_RE` match + `$`-pattern replacement
-//! is still exercised.
+//! `String` → scan → expand. The pipeline spawns no child process at all, so
+//! fuzz-derived bytes can never reach a shell.
 //!
-//! Finding = panic / abort / overflow / OOM / hang. `Err` returns from the parse
-//! pipeline (there are none at this entry — `parse_with_ring` is infallible with
-//! an empty ik/ek `KeyFilter`) and truncated-but-panic-free output on the D-05
-//! non-termination guards are graceful non-findings.
+//! Finding = panic / abort / overflow / OOM / hang. A graceful `Err` is a
+//! non-finding: `parse_with_ring` reports an expansion that outgrew its byte
+//! budget through `ParseOutput::errors` rather than allocating without bound.
 //!
-//! SAFETY: this target relies on `--cfg fuzzing` neutralizing `$()`. The
-//! `compile_error!` below makes a non-fuzzing build fail loudly rather than
-//! silently spawn shells on fuzz bytes.
+//! Built via cargo-fuzz, which sets `--cfg fuzzing` and thereby lowers the
+//! expansion iteration cap and byte budget so every exec stays fast.
 
 #[cfg(not(fuzzing))]
 compile_error!(
-    "parse_pipeline must be built via cargo-fuzz (which sets --cfg fuzzing) so that \
-     command substitution `$()` is stubbed; never run this target without --cfg fuzzing"
+    "parse_pipeline must be built via cargo-fuzz (which sets --cfg fuzzing) so the \
+     expansion caps are lowered to fuzz-sized budgets"
 );
 
 use envrypt::{fsio, parse};

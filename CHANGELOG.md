@@ -23,10 +23,12 @@ value and file formats are the frozen compatibility contract.
 - **`upsert`** — set a key's value in `.env` source text, updating the last occurrence in place or appending a `KEY=value` line.
 - **`mask`** — redact a secret to a masked form for safe display or logging.
 - **`json_to_env`** — convert a JSON object of values into `.env` text.
+- **`parsing runs no commands`** — a `$(…)` sequence in a value is literal text. Parsing a `.env` spawns no child process, so a file an attacker can write cannot execute anything. dotenvx shells `$(…)` out; envrypt does not.
+- **`private keys stay in`** — a `.env` line named after the configured private key is dropped from the returned map and from anything `inject` writes, so a planted line cannot carry the resolved key out to the caller or to `std::env`.
+- **`max_expand_output_bytes`** — `${VAR}` expansion is capped per value (default 1 MiB). A self-referential value that grows on every pass returns `EXPANSION_TOO_LARGE` naming the key instead of exhausting memory; the value is reported, never truncated.
 
 ### Fixed
 
-- **`conformance`** — skip POSIX-shell command-substitution cases on Windows
 - **`paths`** — `.env` file paths resolve correctly on Windows.
 - **`secrets`** — resolver key material is zeroized after use.
 - **`sockeye`** — one-shot credentials are read through sockeye, the safe local path.

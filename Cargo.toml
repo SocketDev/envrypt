@@ -29,7 +29,7 @@ envrypt-conformance = { path = "conformance/runner" }
 # lookbehind semantics the JS LINE/expand regexes need (doc 02 §12 items 3/4);
 # `regex` serves the lookaround-free patterns; `indexmap` is the insertion-ordered
 # map parity requirement (doc 02 §12 item 18); `memchr` backs the documented
-# expand/evaluate gates. None pulls HTTP/openssl.
+# expand gate. None pulls HTTP/openssl.
 fancy-regex = "0.14"
 regex = "1"
 indexmap = "2"
@@ -89,12 +89,11 @@ criterion = { version = "0.5", default-features = false, features = [
   "cargo_bench_support",
 ] }
 
-# doc 11 §5 — base profile from ultrathink's shipped profile. WP-18 flipped `lto` from
-# "thin" to "fat" after the one-time release-artifact A/B (doc 11 §5/§4 WP-18): fat LTO cut
-# the darwin-arm64 release binary 8.73% (4,265,328 → 3,893,088 B, both ad-hoc signed) at no
-# cold-start cost (`--version` -N median 8.12 → 7.95 ms, within σ). The artifact ships via
-# `curl | sh` + npm platform packages (doc 09 §6/§8) so bytes are pure download cost — the
-# numbers say take it (PERF-LEDGER §2/§3).
+# The release profile an embedding application inherits when it builds this crate.
+# Fat LTO plus one codegen unit trade compile time for the smallest, fastest
+# object code, which is the right trade for a library whose callers build once
+# and ship the result. `panic = "abort"` is safe here because the crate returns
+# errors and never unwinds across an FFI boundary.
 [profile.release]
 opt-level = 3
 lto = "fat"

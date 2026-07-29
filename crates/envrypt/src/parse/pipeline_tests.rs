@@ -72,67 +72,69 @@ fn duplicates_last_wins_keeps_original_position() {
   assert_eq!(entries(&out.parsed), one(&[("L", "two"), ("MID", "x")]));
 }
 
-#[cfg(unix)]
-mod command_substitution_gates {
+/// `$(…)` is ordinary text. The parse pipeline runs no command, so a `.env` that
+/// an attacker can write cannot reach a shell; a deliberate divergence from
+/// dotenvx, recorded in `conformance/README.md`.
+mod command_substitution_is_literal_text {
   use super::*;
 
   #[test]
-  fn fresh_value_is_evaluated() {
-    let out = parse_env("CMD=$(echo hi)", &env(&[]));
-    assert_eq!(value(&out, "CMD"), "hi");
+  fn a_command_substitution_survives_as_literal_text() {
+    // Bare, double-quoted, and single-quoted alike; a command that would have
+    // failed is no more special than one that would have succeeded.
+    for (src, expected) in [
+      ("CMD=$(echo hi)", "$(echo hi)"),
+      ("CMD=\"$(echo hi)\"", "$(echo hi)"),
+      ("CMD='$(echo hi)'", "$(echo hi)"),
+      ("CMD=$(exit 3)", "$(exit 3)"),
+      ("CMD=pre $(echo hi) post", "pre $(echo hi) post"),
+    ] {
+      let out = parse_env(src, &env(&[]));
+      assert_eq!(value(&out, "CMD"), expected, "source: {src}");
+      assert!(out.errors.is_empty(), "source: {src}");
+    }
   }
 
   #[test]
-  fn preexisting_different_process_env_value_is_never_evaluated() {
+  fn a_preexisting_process_env_value_still_wins() {
     let out = parse_env("CMD=$(echo hi)", &env(&[("CMD", "other")]));
     assert_eq!(value(&out, "CMD"), "other");
     assert_eq!(out.existed.get("CMD").unwrap().last().unwrap(), "other");
   }
 
   #[test]
-  fn preexisting_process_env_value_itself_is_evaluated() {
-    // The process-env value is evaluated when it equals k (step 2 set
-    // k = processEnv[name]).
-    let out = parse_env("CMD=$(echo file)", &env(&[("CMD", "$(echo hi)")]));
-    assert_eq!(value(&out, "CMD"), "hi");
-    assert_eq!(
-      out.existed.get("CMD").unwrap().last().unwrap(),
-      "$(echo hi)"
-    );
-  }
-
-  #[test]
-  fn overload_with_preexisting_different_value_skips_eval_entirely() {
-    // Quirk: the eval gate tests key-presence + equality. Overload keeps
-    // the file value, which fails the equality arm, so the literal
-    // survives (expand cannot touch `$(`).
-    let pe = env(&[("CMD", "other")]);
-    let mut opts = ParseOptions::new(&pe);
-    opts.overload = true;
-    let out = parse_with_ring("CMD=$(echo hi)", &opts);
-    assert_eq!(value(&out, "CMD"), "$(echo hi)");
-  }
-
-  #[test]
-  fn single_quoted_value_is_never_evaluated() {
-    let out = parse_env("CMD='$(echo hi)'", &env(&[]));
-    assert_eq!(value(&out, "CMD"), "$(echo hi)");
-  }
-
-  #[test]
-  fn failing_command_is_swallowed_and_value_stays_literal() {
-    // A failing command is swallowed; no parse error surfaces.
-    let out = parse_env("CMD=$(exit 3)", &env(&[]));
-    assert_eq!(value(&out, "CMD"), "$(exit 3)");
-    assert!(out.errors.is_empty());
-  }
-
-  #[test]
-  fn evaluated_values_feed_running_parsed_for_later_lines() {
-    let out = parse_env("A=$(echo one)\nB=${A}-2\nC=$(echo $A)", &env(&[]));
+  fn an_inner_variable_reference_still_expands() {
+    // `$(` matches neither expansion alternative, so the parens and the command
+    // text pass through while an inner `$NAME` expands as usual.
+    let out = parse_env("A=one\nB=$(echo $A)", &env(&[]));
     assert_eq!(value(&out, "A"), "one");
-    assert_eq!(value(&out, "B"), "one-2");
-    assert_eq!(value(&out, "C"), "one");
+    assert_eq!(value(&out, "B"), "$(echo one)");
+  }
+
+  /// The direct observation: a `.env` whose value would run `touch` leaves no
+  /// file behind, because nothing is executed. An assertion on the parsed string
+  /// alone could pass while a child still ran.
+  #[test]
+  #[cfg(unix)]
+  fn no_child_process_runs() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let marker = dir.path().join("spawned");
+    let src = format!(
+      "CMD=$(touch {0})\nQUOTED=\"$(/bin/sh -c 'touch {0}')\"\n",
+      marker.display()
+    );
+
+    let out = parse_env(&src, &env(&[]));
+
+    assert!(
+      !marker.exists(),
+      "parsing a `$(…)` value must spawn no child process"
+    );
+    assert_eq!(value(&out, "CMD"), format!("$(touch {})", marker.display()));
+    assert_eq!(
+      value(&out, "QUOTED"),
+      format!("$(/bin/sh -c 'touch {}')", marker.display())
+    );
   }
 }
 
@@ -188,10 +190,11 @@ mod encrypted_values {
   }
 
   #[test]
-  #[cfg(unix)]
-  fn decrypted_plaintext_is_reprocessed_through_evaluate_and_expand() {
+  fn decrypted_plaintext_is_reprocessed_through_expand() {
     let kp = crypto::keypair();
     let secret = crypto::encrypt(&kp.public_key, "${BASE}-world", true).unwrap();
+    // A decrypted `$(…)` is text like any other: reprocessing expands it, and
+    // never executes it.
     let cmdsecret = crypto::encrypt(&kp.public_key, "$(echo dyn)", true).unwrap();
     let src = format!(
       "ENVRYPT_PUBLIC_KEY=\"{}\"\nBASE=hello\nSECRET=\"{}\"\nCMDSECRET=\"{}\"",
@@ -203,7 +206,7 @@ mod encrypted_values {
     opts.ring = &ring;
     let out = parse_with_ring(&src, &opts);
     assert_eq!(value(&out, "SECRET"), "hello-world");
-    assert_eq!(value(&out, "CMDSECRET"), "dyn");
+    assert_eq!(value(&out, "CMDSECRET"), "$(echo dyn)");
     assert!(out.errors.is_empty());
   }
 
@@ -280,9 +283,8 @@ mod encrypted_values {
   }
 
   #[test]
-  fn still_encrypted_values_skip_evaluate_and_expand() {
-    // While the `encrypted:` prefix remains, evaluate and expand are both
-    // skipped.
+  fn still_encrypted_values_skip_expand() {
+    // While the `encrypted:` prefix remains, expansion is skipped.
     let src = "SECRET=\"encrypted:${NOT_EXPANDED}\"";
     let out = parse_env(src, &env(&[("NOT_EXPANDED", "boom")]));
     assert_eq!(value(&out, "SECRET"), "encrypted:${NOT_EXPANDED}");

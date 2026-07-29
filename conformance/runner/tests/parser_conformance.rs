@@ -22,8 +22,7 @@ fn standard_base_env() -> BaseEnv {
 
 /// The runner's `parses_to` hook over envrypt's file-read path: detect the encoding,
 /// read the `.env`, then feed `parse_with_ring` an empty ring (the spec corpus is
-/// crypto-free) with the case dir as the `$()` child cwd. This mirrors how the envs
-/// resolver reads a single `.env` file.
+/// crypto-free). This mirrors how the envs resolver reads a single `.env` file.
 struct CoreParsesTo;
 
 impl ParsesTo for CoreParsesTo {
@@ -39,8 +38,7 @@ impl ParsesTo for CoreParsesTo {
       .map_err(|e| format!("read_file_x({}): {e}", env_path.display()))?;
 
     let process_env: IndexMap<String, String> = process_env.iter().cloned().collect();
-    let mut opts = envrypt::parse::ParseOptions::new(&process_env);
-    opts.cwd = Some(dir);
+    let opts = envrypt::parse::ParseOptions::new(&process_env);
     let out = envrypt::parse::parse_with_ring(&src, &opts);
 
     if let Some(error) = out.errors.first() {
@@ -58,25 +56,10 @@ fn tier1_spec_cases_pass_against_envrypt() {
   let all = load_spec_cases(&spec_cases_path()).expect("spec.json loads");
   assert_eq!(all.len(), 88);
 
-  // Command-substitution cases assert POSIX-shell output. envrypt runs `$(…)`
-  // through the platform shell exactly as Node's `execSync` does — `/bin/sh -c`
-  // on POSIX, `cmd.exe /c` on Windows — so on Windows `$(echo "$VAR")` yields
-  // the literal (cmd never expands `$VAR`), which matches Node on Windows but
-  // not the POSIX golden. Skip them on Windows; POSIX runners cover all 88.
-  let skip_cmd_sub = cfg!(windows);
-  let cases: Vec<SpecCase> = all
-    .into_iter()
-    .filter(|c| !(skip_cmd_sub && c.input.contains("$(")))
-    .collect();
-  if skip_cmd_sub {
-    eprintln!(
-      "conformance: skipped {} POSIX-shell command-substitution case(s) on Windows (cmd.exe != /bin/sh)",
-      88 - cases.len()
-    );
-  }
-
+  // Every case runs on every platform: the parse pipeline spawns no shell, so
+  // there is no `/bin/sh` vs `cmd.exe` split to skip around.
   let failures = run_spec_suite(
-    &cases,
+    &all,
     &MapSource::ParsesTo(&CoreParsesTo),
     &standard_base_env,
   );

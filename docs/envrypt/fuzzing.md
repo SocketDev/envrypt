@@ -84,37 +84,37 @@ fuzz/run.sh parse_pipeline 60          # one target, 60 s
 If your `cargo` is not the rustup shim, `fuzz/run.sh` falls back to
 `rustup run nightly cargo fuzz …` automatically.
 
-## The two `cfg(fuzzing)` harness seams (production is unchanged)
+## The `cfg(fuzzing)` harness seams (production is unchanged)
 
-cargo-fuzz sets `--cfg fuzzing` build-wide. Two `envrypt` code paths compile
-differently ONLY under that cfg (declared in `crates/envrypt/Cargo.toml`'s
+cargo-fuzz sets `--cfg fuzzing` build-wide. Two `envrypt` constants take smaller
+values ONLY under that cfg (declared in `crates/envrypt/Cargo.toml`'s
 `check-cfg`). No default, normal, or `--all-features` build ever sets it, so
 shipped behavior and `cargo test` behavior are byte-for-byte the production
-code.
+code, and both guards exist in production — the fuzz build only shrinks them.
 
-1. **`parse::evaluate` command-substitution stub.** Fuzz bytes must NEVER be
-   executed by a shell. Under `--cfg fuzzing`, `exec_shell` is a deterministic
-   pure stub that echoes the command text back — the real `EVAL_RE` match +
-   `chomp` + replace machinery is still fuzzed, but nothing spawns. The
-   `parse_pipeline` target additionally `compile_error!`s under `not(fuzzing)`
-   so it can never be built without the stub.
-2. **`parse::expand` lowered iteration cap + output-size guard.** A
-   self-reinserting expansion — a `${…}`/`$'`/`$&` value that re-inserts
-   itself — has two hostile members. The ADDITIVE member grows the result about linearly
-   per pass and does O(cap²) work: at the production
-   `MAX_EXPAND_ITERATIONS = 10_000` a single exec runs for tens of seconds even
-   on a ≤128-byte input (measured 35 s uninstrumented; minutes under ASan),
-   tripping every finite `-timeout`. Under `--cfg fuzzing` the cap is 256, so
-   the identical scan → look-up → replace path is fuzzed on grown strings fast.
-   The MULTIPLICATIVE member (an after-match/whole-match reinsertion that
-   duplicates a still-`${…}`-bearing tail) grows the result exponentially per
-   pass and OOM-aborts the fuzzer at ~31 passes regardless of any iteration
-   cap; a past run recorded a 2.4 GB single allocation. So under
-   `--cfg fuzzing` a companion output-size guard,
-   `parse::expand::FUZZ_MAX_EXPAND_OUTPUT_BYTES`
-   (16 KiB), truncates and breaks once the intermediate result exceeds the
-   budget. Production keeps the 10 000 cap and unbounded output — that envelope
-   is deliberate, documented behavior of the frozen expansion semantics.
+1. **`MAX_EXPAND_ITERATIONS` (10 000 → 256).** A self-reinserting expansion's
+   ADDITIVE member — a value that re-inserts the match verbatim — grows the
+   result about linearly per pass and does O(cap²) work: at the production cap
+   a single exec runs for tens of seconds even on a ≤128-byte input (measured
+   35 s uninstrumented; minutes under ASan), tripping every finite `-timeout`.
+   The lowered cap fuzzes the identical scan → look-up → replace path on grown
+   strings, fast.
+2. **`DEFAULT_MAX_EXPAND_OUTPUT_BYTES` (1 MiB → 16 KiB).** The MULTIPLICATIVE
+   member — an after-match/whole-match reinsertion that duplicates a
+   still-`${…}`-bearing tail — doubles the result every pass and blows past any
+   iteration cap; a past run recorded a 2.4 GB single allocation. The byte
+   budget is what stops it, in production and under fuzzing alike: `expand`
+   returns an error, `parse_with_ring` records `EXPANSION_TOO_LARGE` on that
+   key, and the value is left unexpanded rather than truncated. The budget is
+   enforced inside `js_string_replace_first`, so the transient allocation of a
+   `$'`-dense replacement stays within about twice the budget.
+
+A caller may set the budget per load through
+`LoadOptions::max_expand_output_bytes`.
+
+Command substitution needed a third seam once, a `cfg(fuzzing)` stub that kept
+fuzz bytes away from `/bin/sh`. The parse pipeline no longer spawns anything, so
+there is nothing left to stub.
 
 The `ecies_decrypt` target also uses a `cfg(fuzzing)`
 `crypto::fuzz_decrypt_wire_payload` entry to drive decryption over raw
@@ -139,8 +139,7 @@ Calibrated for the ASan + coverage instrumentation of a cargo-fuzz build:
 A **panic / abort / overflow / OOM / hang** is a finding; a graceful `Err`/`None`
 return is not. Property assertions per target:
 
-- `parse_pipeline` — never panics through encoding-detect → scan → expand →
-  evaluate-gate.
+- `parse_pipeline` — never panics through encoding-detect → scan → expand.
 - `ecies_decrypt` — never panics; every decrypt failure maps to exactly one of
   the conditions in `docs/envrypt/crypto-formats.md` §1.4;
   `decrypt(encrypt(pt)) == pt`.
@@ -196,8 +195,8 @@ Do NOT, per prior measurement:
 Adopted, with the receipts in git history:
 
 - `[profile.release]` = opt-level 3 / **fat** LTO / codegen-units 1 /
-  panic=abort / strip=symbols. Fat LTO won its one-time A/B (−8.73% binary size,
-  cold-start delta within noise).
+  panic=abort / strip=symbols — the smallest, fastest object code for an
+  embedding application that builds this crate once and ships the result.
 - `[profile.bench]` inherits release with `debug = true`, `strip = "none"` for
   symbolized criterion profiles (`crates/envrypt/benches/`).
 - **Deferred pending an A/B:** caching the parsed `SecretKey` in ring entries

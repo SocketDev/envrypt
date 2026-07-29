@@ -45,6 +45,19 @@ Behavior contracts, pinned by `tests/public_api.rs` and the keychain tests:
 - **Library purity.** The library talks to its caller through return values and
   the optional `on_diagnostic` callback; stdout, stderr, argv, and signal
   handlers belong to the embedding app.
+- **Parsing runs no commands.** A `$(…)` sequence in a value is literal text,
+  not a shell command. Parsing a `.env` spawns no child process, so a file an
+  attacker can write cannot execute anything. This diverges from dotenvx, which
+  shells `$(…)` out; the four affected corpus cases are marked in
+  `conformance/README.md`.
+- **The private key never leaves.** A `.env` line named after the configured
+  private key (`ENVRYPT_PRIVATE_KEY*` by default) is dropped from the returned
+  map and from anything `inject` writes, so a planted line cannot carry the
+  resolved key out to the caller or to `std::env`.
+- **Bounded expansion.** `${VAR}` expansion is capped at
+  `LoadOptions::max_expand_output_bytes` (default 1 MiB) per value. A
+  self-referential value that grows on every pass returns `EXPANSION_TOO_LARGE`
+  naming the key; the value is reported, never truncated.
 
 ## Encryption format
 

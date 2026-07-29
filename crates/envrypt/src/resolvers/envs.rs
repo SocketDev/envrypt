@@ -105,11 +105,13 @@ pub struct EnvsOptions<'a> {
   pub env_keys_file: Option<Vec<String>>,
   /// Providers (keychain per the caller's gating; empty = none).
   pub providers: &'a [Box<dyn KeyProvider>],
-  /// Working directory for path resolution and `$()` children. `None` inherits
-  /// the process cwd.
+  /// Working directory for path resolution. `None` inherits the process cwd.
   pub cwd: Option<PathBuf>,
   /// The key-identifier naming (default `ENVRYPT_`).
   pub naming: KeyNaming,
+  /// The byte budget for one expanded value. `None` →
+  /// [`crate::parse::expand::DEFAULT_MAX_EXPAND_OUTPUT_BYTES`].
+  pub max_expand_output_bytes: Option<usize>,
 }
 
 /// Resolver output: rows plus the original paths of every readable file
@@ -372,7 +374,6 @@ fn raw_read_error(err: &std::io::Error, filepath: &Path) -> RowError {
 
 /// Shared per-row parse: build the seeded ring (phase 1), run providers
 /// (phase 2), parse, record bookkeeping, inject.
-#[allow(clippy::too_many_arguments)]
 fn parse_row(
   src: &str,
   fk: Vec<PathBuf>,
@@ -380,7 +381,6 @@ fn parse_row(
   process_env: &mut IndexMap<String, String>,
   row: &mut ProcessedEnv,
   on_status: &mut dyn FnMut(&str),
-  cwd: &Path,
 ) {
   // Seed the ring with the source's public keys.
   let mut seed_ring = Ring::new();
@@ -409,8 +409,10 @@ fn parse_row(
   let mut parse_options = ParseOptions::new(process_env);
   parse_options.overload = options.overload;
   parse_options.ring = &ring;
-  parse_options.cwd = Some(cwd);
   parse_options.naming = &options.naming;
+  if let Some(budget) = options.max_expand_output_bytes {
+    parse_options.max_expand_output_bytes = budget;
+  }
   let output = parse_with_ring(src, &parse_options);
   clear_ring(&mut ring);
 
@@ -484,7 +486,7 @@ fn inject_env_file(
     }
   };
 
-  parse_row(&src, fk, options, process_env, &mut row, on_status, cwd);
+  parse_row(&src, fk, options, process_env, &mut row, on_status);
   row
 }
 

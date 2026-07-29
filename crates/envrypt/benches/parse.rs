@@ -24,16 +24,15 @@ const PARSE_SMALL_ENV: &str = "HELLO=World\nNODE_ENV=production\n";
 const SPEC_JSON: &str = include_str!("../../../conformance/cases/spec/spec.json");
 
 /// 50 vars whose values carry bare `$` noise that forms NEITHER `${...}` nor a
-/// `$IDENT` reference (every `$` is followed by a space or a digit) and no `$(`
-/// command substitution. This defeats the `memchr(b'$')` short-circuit in
-/// `expand()` (the byte IS present) while producing zero replacements — the
-/// canary for expand-gate effectiveness (the `expand()` memchr gates).
+/// `$IDENT` reference (every `$` is followed by a space or a digit). This defeats
+/// the `memchr(b'$')` short-circuit in `expand()` (the byte IS present) while
+/// producing zero replacements — the canary for expand-gate effectiveness (the
+/// `expand()` memchr gates).
 fn expand_heavy_env() -> String {
   let mut src = String::with_capacity(50 * 40);
   for i in 0..50 {
     // `$ ` (dollar-space) and `$9` (dollar-digit) never match EXPAND_RE
-    // `(?<!\\)\$\{([^{}]+)\}|(?<!\\)\$([A-Za-z_][A-Za-z0-9_]*)`; there is no
-    // `$(` so the evaluate gate short-circuits too.
+    // `(?<!\\)\$\{([^{}]+)\}|(?<!\\)\$([A-Za-z_][A-Za-z0-9_]*)`.
     src.push_str(&format!(
       "NOISE_{i:02}=cost $ is $9 and $ {i} bucks off $\n"
     ));
@@ -49,19 +48,6 @@ fn parse_plain(src: &str) -> envrypt::parse::ParseOutput {
   parse_with_ring(src, &opts)
 }
 
-/// True when parsing `input` would reach `evaluate()` (parse step 6) with a live
-/// command substitution and spawn a real `sh -c` child — i.e. it contains a `$(`
-/// that is NOT backslash-escaped. An escaped `\$(` never triggers evaluate, so
-/// `117_DONT_CHOKE` (whose sole `$(` is `\$(` inside a single-quoted value) is NOT
-/// a spawner and stays in the corpus. A fixed corpus can afford this
-/// finer-grained filter (vs a blunt `contains("$(")`) and keep the escaped
-/// adversarial case.
-fn spawns_subprocess(input: &str) -> bool {
-  input
-    .match_indices("$(")
-    .any(|(idx, _)| idx == 0 || input.as_bytes()[idx - 1] != b'\\')
-}
-
 fn spec_inputs() -> Vec<String> {
   let value: serde_json::Value = serde_json::from_str(SPEC_JSON).expect("spec.json is valid JSON");
   value
@@ -69,14 +55,6 @@ fn spec_inputs() -> Vec<String> {
     .expect("spec.json is a JSON array of cases")
     .iter()
     .filter_map(|case| case.get("input").and_then(|i| i.as_str()))
-    // Drop ONLY the four command-substitution cases (504/505/506/601) whose
-    // parse spawns a real `sh -c` child — including them would measure
-    // subprocess spawn, not grammar throughput, and a parse micro-bench must
-    // never execute its inputs. Everything else stays,
-    // including the adversarial `117_DONT_CHOKE` (its `$(` is an escaped `\$(`
-    // in a single-quoted value, so it never evaluates) and the 401-408 backtick
-    // cases (backticks parse as literal text). Net corpus: 84 of the 88 cases.
-    .filter(|input| !spawns_subprocess(input))
     .map(str::to_string)
     .collect()
 }
@@ -90,8 +68,8 @@ fn bench_parse(c: &mut Criterion) {
     b.iter(|| black_box(parse_plain(black_box(PARSE_SMALL_ENV))));
   });
 
-  // parse_spec_corpus — grammar-wide throughput over 84 of the 88 spec cases
-  // (the 4 command-substitution cases are excluded; see `spec_inputs`).
+  // parse_spec_corpus — grammar-wide throughput over all 88 spec cases. The
+  // pipeline spawns nothing, so every case measures grammar work.
   let inputs = spec_inputs();
   let total_bytes: usize = inputs.iter().map(String::len).sum();
   group.throughput(Throughput::Bytes(total_bytes as u64));

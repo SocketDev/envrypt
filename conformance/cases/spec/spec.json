@@ -374,25 +374,27 @@
     "input": "# https://github.com/bkeepers/dotenv/pull/526\nPARENTHESES='passwo(rd'\nPARENTHESES_EXPAND=\"$(echo \"$PARENTHESES\")\"",
     "expected": {
       "PARENTHESES": "passwo(rd",
-      "PARENTHESES_EXPAND": "passwo(rd"
+      "PARENTHESES_EXPAND": "$(echo \"passwo(rd\")"
     },
-    "notes": "command substitution: runningParsed overrides processEnv in the child env"
+    "notes": "DIVERGENCE from dotenvx: envrypt runs no command, so `$(...)` is literal text. The inner `$PARENTHESES` still expands (runningParsed supplies it); the parens and the command word survive verbatim."
   },
   {
     "id": "505_EXPAND_RETAIN_INNER_QUOTES",
     "input": "# https://github.com/bkeepers/dotenv/issues/530\n# Command substitution double-quote expansion\nRETAIN_INNER_QUOTES={\"foo\": \"bar\"}\nRETAIN_INNER_QUOTES_EXPAND=\"$(echo \"$RETAIN_INNER_QUOTES\")\"",
     "expected": {
       "RETAIN_INNER_QUOTES": "{\"foo\": \"bar\"}",
-      "RETAIN_INNER_QUOTES_EXPAND": "{\"foo\": \"bar\"}"
-    }
+      "RETAIN_INNER_QUOTES_EXPAND": "$(echo \"{\"foo\": \"bar\"}\")"
+    },
+    "notes": "DIVERGENCE from dotenvx: envrypt runs no command, so `$(...)` is literal text; only the inner `$RETAIN_INNER_QUOTES` expands."
   },
   {
     "id": "506_EXPAND_SINGLE_QUOTES_RETAIN_INNER_QUOTES",
     "input": "RETAIN_INNER_QUOTES_AS_STRING='{\"foo\": \"bar\"}'\nRETAIN_INNER_QUOTES_AS_STRING_EXPAND=\"$(echo \"$RETAIN_INNER_QUOTES_AS_STRING\")\"",
     "expected": {
       "RETAIN_INNER_QUOTES_AS_STRING": "{\"foo\": \"bar\"}",
-      "RETAIN_INNER_QUOTES_AS_STRING_EXPAND": "{\"foo\": \"bar\"}"
-    }
+      "RETAIN_INNER_QUOTES_AS_STRING_EXPAND": "$(echo \"{\"foo\": \"bar\"}\")"
+    },
+    "notes": "DIVERGENCE from dotenvx: envrypt runs no command, so `$(...)` is literal text; only the inner `$RETAIN_INNER_QUOTES_AS_STRING` expands."
   },
   {
     "id": "507_EXPAND_ESCAPED",
@@ -701,9 +703,9 @@
     "id": "601_EVAL",
     "input": "HELLO=\"$(echo world)\"",
     "expected": {
-      "HELLO": "world"
+      "HELLO": "$(echo world)"
     },
-    "notes": "command substitution via execSync /bin/sh; mirrors tests/.env.eval (which uses the same content)"
+    "notes": "DIVERGENCE from dotenvx: dotenvx shells this out via execSync; envrypt spawns nothing, so the whole `$(echo world)` is the value."
   },
   {
     "id": "901_LATIN1",

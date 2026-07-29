@@ -15,7 +15,7 @@ every surface below must stay green on every change.
 
 ## 2. Unit tests (`#[cfg(test)]` in `crates/envrypt/src/**`)
 
-Module-level coverage for parse (scan/expand/evaluate), crypto, edit,
+Module-level coverage for parse (scan/expand), crypto, edit,
 conventions (`presets.rs` filepaths, `resolvers/envs.rs` ordering), keyring,
 `fsio`, `keys_file`, `errors`, and `services/lock.rs` (`unlock_value`).
 

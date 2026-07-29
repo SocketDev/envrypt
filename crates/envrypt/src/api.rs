@@ -229,6 +229,16 @@ pub struct LoadOptions {
   pub private_key_var: Option<String>,
   /// An explicit public-key variable name (overrides the prefix-derived name).
   pub public_key_var: Option<String>,
+  /// The byte budget for expanding one `.env` value. `None` → the crate default
+  /// (1 MiB).
+  ///
+  /// `${VAR}` expansion rewrites a value in place and rescans it, so a value that
+  /// re-inserts itself — `SELF="${SELF}$'x"` and friends — doubles on every pass
+  /// and would otherwise exhaust host memory from a KB-scale `.env`. Exceeding
+  /// the budget is an `EXPANSION_TOO_LARGE` error naming the key; the value is
+  /// never silently truncated. Raise it only if a legitimate value genuinely
+  /// expands past a megabyte.
+  pub max_expand_output_bytes: Option<usize>,
   /// Opt-in 1Password `op://` secret resolution. When `true`, every resolved
   /// value of the form `op://<vault>/<item>/<field>` is replaced with the secret
   /// read from the 1Password CLI (`op read`), and the secret is injected in
@@ -337,6 +347,7 @@ impl Default for LoadOptions {
       key_prefix: None,
       private_key_var: None,
       public_key_var: None,
+      max_expand_output_bytes: None,
       resolve_op_references: false,
       op_timeout: None,
       resolve_bw_references: false,
@@ -603,6 +614,7 @@ pub fn config(opts: &LoadOptions) -> Result<Loaded, LoadError> {
     home_dir: None,
     cwd: None,
     naming,
+    max_expand_output_bytes: opts.max_expand_output_bytes,
     op_exec,
     op_timeout,
     bw_exec,

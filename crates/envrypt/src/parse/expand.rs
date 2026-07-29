@@ -47,18 +47,40 @@ pub struct ExpandOptions<'a> {
   /// Values defined single-quoted earlier in the file; the literals guard reads
   /// them.
   pub literals: &'a IndexMap<String, String>,
+  /// The byte budget for the expanded value; exceeding it is
+  /// [`ExpandError`]. Default [`DEFAULT_MAX_EXPAND_OUTPUT_BYTES`].
+  pub max_output_bytes: usize,
+}
+
+/// [`expand`] refused to grow its result past
+/// [`ExpandOptions::max_output_bytes`]. Carries the budget that was hit so the
+/// caller can name it in the error it raises.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExpandError {
+  /// The byte budget the expansion tried to exceed.
+  pub max_output_bytes: usize,
 }
 
 /// Expands `${VAR}` and `$VAR` references in `value`.
 ///
 /// A class of self-reinserting replacements (for example `$&` in an env value, or
-/// `expand("X ${SET}")` with `SET='${SET}'`) never terminates. The loop caps at
-/// [`MAX_EXPAND_ITERATIONS`] replacements and returns the current result; every
-/// terminating input finishes far below the cap.
-pub fn expand(value: &str, opts: &ExpandOptions) -> String {
+/// `expand("X ${SET}")` with `SET='${SET}'`) never terminates. Two guards bound
+/// it: the loop caps at [`MAX_EXPAND_ITERATIONS`] replacements, and the result
+/// may not grow past [`ExpandOptions::max_output_bytes`]. Every terminating input
+/// finishes far below both.
+///
+/// The additive members of that class (a replacement that reinserts the match
+/// verbatim) hit the iteration cap and return the current result. The
+/// multiplicative members (a `$'`/`` $` ``/`$&` replacement that duplicates a
+/// still-`${…}`-bearing tail, doubling per pass) reach the byte budget in about
+/// 20 passes from a KB-scale input, and return [`ExpandError`] rather than
+/// growing until the host runs out of memory. The value is never silently
+/// truncated: a caller that hits the budget gets an error, not a shortened
+/// secret.
+pub fn expand(value: &str, opts: &ExpandOptions) -> Result<String, ExpandError> {
   // EXPAND_RE cannot match without a `$` byte.
   if memchr::memchr(b'$', value.as_bytes()).is_none() {
-    return value.to_string();
+    return Ok(value.to_string());
   }
 
   // Lookup order over the two maps: processEnv wins by default, runningParsed
@@ -152,32 +174,17 @@ pub fn expand(value: &str, opts: &ExpandOptions) -> String {
     };
 
     // Replace the first literal occurrence of the template (which may be an
-    // escaped one before the regex match); `$`-patterns are live.
-    match js_string_replace_first(&result, &template, &replacement) {
-      Some(next) => result = next,
-      None => break, // unreachable: the template was just matched
-    }
-
-    // Fuzz-only output-size guard, companion to the lowered
-    // `MAX_EXPAND_ITERATIONS` (see docs/envrypt/fuzzing.md). The
-    // multiplicative `$'`/`$&` self-reinserting case (a value whose
-    // after-match/whole-match reinsertion duplicates a still-`${…}`-bearing
-    // tail) grows `result` exponentially per pass, so it OOM-aborts the fuzzer
-    // long before any iteration cap; the cap bounds only the additive case's
-    // O(cap²) time, never this case's memory. Under `--cfg fuzzing`, truncate
-    // to a small byte budget and stop, so the same scan → look-up → replace
-    // body still runs on grown strings without OOM. Truncating here keeps
-    // every stored `running_parsed` value within the budget, so a later line's
-    // replacement cannot re-explode. Production has no size cap. See
-    // `FUZZ_MAX_EXPAND_OUTPUT_BYTES`.
-    #[cfg(fuzzing)]
-    if result.len() > FUZZ_MAX_EXPAND_OUTPUT_BYTES {
-      let mut end = FUZZ_MAX_EXPAND_OUTPUT_BYTES;
-      while !result.is_char_boundary(end) {
-        end -= 1;
+    // escaped one before the regex match); `$`-patterns are live. The budget is
+    // enforced inside the replace, so the transient allocation stays bounded
+    // even when a single `$'`-heavy replacement would multiply the tail.
+    match js_string_replace_first(&result, &template, &replacement, opts.max_output_bytes) {
+      Replaced::Value(next) => result = next,
+      Replaced::Absent => break, // unreachable: the template was just matched
+      Replaced::TooLarge => {
+        return Err(ExpandError {
+          max_output_bytes: opts.max_output_bytes,
+        })
       }
-      result.truncate(end);
-      break;
     }
 
     // Break (a): whole result equals env[name] of the just-expanded name.
@@ -193,7 +200,7 @@ pub fn expand(value: &str, opts: &ExpandOptions) -> String {
       }
     }
   }
-  result
+  Ok(result)
 }
 
 /// Iteration cap that bounds the non-terminating expansion class (see
@@ -211,50 +218,78 @@ pub const MAX_EXPAND_ITERATIONS: usize = 10_000;
 /// scan → look-up → `js_string_replace_first` path fuzzed on grown strings while
 /// every exec stays fast.
 ///
-/// The lowered cap does not cover everything. The multiplicative case (a
-/// `$'`/`$&` value whose after-match/whole-match reinsertion duplicates a
-/// still-`${…}`-bearing tail) grows `result` exponentially per pass and
-/// OOM-aborts the fuzzer at about 31 passes, past any iteration cap.
-/// [`FUZZ_MAX_EXPAND_OUTPUT_BYTES`] is the companion output-size guard that bounds
-/// it.
-///
-/// Both guards match the `parse::evaluate` command-substitution stub: fuzz-only,
-/// no change to any shipped build. Production keeps the 10k cap and no size cap,
-/// so on this hostile input it stays non-terminating or OOMs, which is the frozen
-/// expansion behavior.
+/// The lowered cap does not cover the multiplicative case (a `$'`/`$&` value
+/// whose after-match/whole-match reinsertion duplicates a still-`${…}`-bearing
+/// tail): it grows `result` exponentially per pass, past any iteration cap.
+/// [`DEFAULT_MAX_EXPAND_OUTPUT_BYTES`] is the companion output-size guard that
+/// bounds it, and is likewise lowered under this cfg.
 #[cfg(fuzzing)]
 pub const MAX_EXPAND_ITERATIONS: usize = 256;
 
-/// Fuzz-only output-size guard, companion to the lowered
-/// [`MAX_EXPAND_ITERATIONS`] (`--cfg fuzzing`; see docs/envrypt/fuzzing.md).
-/// Bounds the intermediate `expand` result so the multiplicative `$'`/`$&`
-/// self-reinserting case terminates without OOM (it grows the string
-/// exponentially per pass, past any iteration cap). 16 KiB is 4x the fuzz
-/// `-max_len` (4096), ample to fuzz grown-string behavior, and keeps even a
-/// pathological single `js_string_replace_first` call (result within budget,
-/// replacement within budget with about 8K `$'`, each duplicating a ≤16 KiB tail
-/// → ≤128 MiB transient) well under `-rss_limit_mb=2048`. The truncate-and-break
-/// at the call site keeps every stored value within this bound so it cannot
-/// re-explode. Production has no such cap (see [`MAX_EXPAND_ITERATIONS`]).
+/// The default byte budget for one expanded value ([`ExpandOptions`] carries the
+/// effective one, and [`crate::LoadOptions::max_expand_output_bytes`] sets it).
+/// The multiplicative `$'`/`` $` ``/`$&` self-reinserting case doubles `result`
+/// every pass and so blows past any iteration cap; without a size budget a
+/// KB-scale `.env` value exhausts host memory in about 31 passes. 1 MiB is three
+/// orders of magnitude above any real `.env` value, and the budget is enforced
+/// inside [`js_string_replace_first`], so the transient allocation of even a
+/// pathological `$'`-dense replacement stays within about twice the budget.
+#[cfg(not(fuzzing))]
+pub const DEFAULT_MAX_EXPAND_OUTPUT_BYTES: usize = 1 << 20; // 1 MiB
+
+/// Fuzz-lowered [`DEFAULT_MAX_EXPAND_OUTPUT_BYTES`] (`--cfg fuzzing`; see
+/// docs/envrypt/fuzzing.md). 16 KiB is 4x the fuzz `-max_len` (4096), ample to
+/// fuzz grown-string behavior, and keeps every exec far under
+/// `-rss_limit_mb=2048`.
 #[cfg(fuzzing)]
-const FUZZ_MAX_EXPAND_OUTPUT_BYTES: usize = 1 << 14; // 16 KiB
+pub const DEFAULT_MAX_EXPAND_OUTPUT_BYTES: usize = 1 << 14; // 16 KiB
+
+/// The outcome of [`js_string_replace_first`].
+pub(crate) enum Replaced {
+  /// `search` is absent from the haystack.
+  Absent,
+  /// The replaced string.
+  Value(String),
+  /// The replaced string would exceed the caller's byte budget, so it was never
+  /// built.
+  TooLarge,
+}
 
 /// JS `String.prototype.replace(searchString, replacement)` — replaces the FIRST
 /// literal occurrence of `search`, applying the ECMA-262 `GetSubstitution`
 /// patterns for string-search replace: `$$` → `$`, `$&` → matched text,
 /// `` $` `` → text before the match, `$'` → text after the match; every other `$`
-/// (incl. `$1`, `$<`) stays literal. Returns `None` when `search` is absent.
+/// (incl. `$1`, `$<`) stays literal.
+///
+/// The result may not exceed `max_output_bytes`. The budget is checked as the
+/// output is assembled rather than after, so a replacement carrying many `$'`
+/// patterns — each of which reinserts the whole after-match tail — cannot
+/// allocate an arbitrarily large intermediate before anyone notices.
 pub(crate) fn js_string_replace_first(
   haystack: &str,
   search: &str,
   replacement: &str,
-) -> Option<String> {
-  let pos = haystack.find(search)?;
+  max_output_bytes: usize,
+) -> Replaced {
+  let Some(pos) = haystack.find(search) else {
+    return Replaced::Absent;
+  };
   let before = &haystack[..pos];
   let after = &haystack[pos + search.len()..];
 
   let mut out = String::with_capacity(haystack.len() + replacement.len());
-  out.push_str(before);
+  // Appends `piece` unless it would push `out` past the budget.
+  macro_rules! push_bounded {
+    ($piece:expr) => {{
+      let piece: &str = $piece;
+      if out.len() + piece.len() > max_output_bytes {
+        return Replaced::TooLarge;
+      }
+      out.push_str(piece);
+    }};
+  }
+
+  push_bounded!(before);
   // ECMA-262 GetSubstitution over the replacement, string-search flavor
   // (no capture groups: `$1`/`$<` stay literal).
   let bytes = replacement.as_bytes();
@@ -270,8 +305,8 @@ pub(crate) fn js_string_replace_first(
         _ => (None, 1),
       };
       if let Some(r) = rep {
-        out.push_str(&replacement[seg..i]);
-        out.push_str(r);
+        push_bounded!(&replacement[seg..i]);
+        push_bounded!(r);
         i += skip;
         seg = i;
         continue;
@@ -279,9 +314,9 @@ pub(crate) fn js_string_replace_first(
     }
     i += 1;
   }
-  out.push_str(&replacement[seg..]);
-  out.push_str(after);
-  Some(out)
+  push_bounded!(&replacement[seg..]);
+  push_bounded!(after);
+  Replaced::Value(out)
 }
 
 #[cfg(test)]
@@ -297,17 +332,22 @@ mod tests {
       .collect()
   }
 
+  fn options<'a>(
+    process_env: &'a IndexMap<String, String>,
+    empty: &'a IndexMap<String, String>,
+  ) -> ExpandOptions<'a> {
+    ExpandOptions {
+      overload: false,
+      process_env,
+      running_parsed: empty,
+      literals: empty,
+      max_output_bytes: DEFAULT_MAX_EXPAND_OUTPUT_BYTES,
+    }
+  }
+
   fn expand_env(value: &str, process_env: &IndexMap<String, String>) -> String {
     let empty = IndexMap::new();
-    expand(
-      value,
-      &ExpandOptions {
-        overload: false,
-        process_env,
-        running_parsed: &empty,
-        literals: &empty,
-      },
-    )
+    expand(value, &options(process_env, &empty)).expect("expansion stays within the byte budget")
   }
 
   #[test]
@@ -376,12 +416,11 @@ mod tests {
     let got = expand(
       "${L}${L}",
       &ExpandOptions {
-        overload: false,
-        process_env: &e,
-        running_parsed: &empty,
         literals: &lits,
+        ..options(&e, &empty)
       },
-    );
+    )
+    .unwrap();
     assert_eq!(got, "$X${L}");
   }
 
@@ -439,22 +478,21 @@ mod tests {
     let default = expand(
       "${X}",
       &ExpandOptions {
-        overload: false,
-        process_env: &pe,
         running_parsed: &rp,
-        literals: &empty,
+        ..options(&pe, &empty)
       },
-    );
+    )
+    .unwrap();
     assert_eq!(default, "fromPE");
     let overload = expand(
       "${X}",
       &ExpandOptions {
         overload: true,
-        process_env: &pe,
         running_parsed: &rp,
-        literals: &empty,
+        ..options(&pe, &empty)
       },
-    );
+    )
+    .unwrap();
     assert_eq!(overload, "fromRP");
   }
 
@@ -469,56 +507,93 @@ mod tests {
     let _ = expand_env("${SET}", &env(&[("SET", "$&")]));
   }
 
-  // Regression for the multiplicative `$'`/`$&` self-reinserting case (see
-  // docs/envrypt/fuzzing.md): the after-match `$'` duplicates a
-  // still-`${…}`-bearing tail, so `result` grows exponentially per pass and can
-  // OOM. The lowered iteration cap bounds only the additive case's O(cap²) time,
-  // never this case's memory, so the fuzz build adds
-  // `FUZZ_MAX_EXPAND_OUTPUT_BYTES`. This `#[cfg(fuzzing)]` test pins that guard;
-  // run it with `RUSTFLAGS="--cfg fuzzing" cargo test -p envrypt`. The committed
-  // seed `fuzz/corpus/parse_pipeline/craft-expand-multiplicative` gives the
-  // nightly coverage of the same input.
-  #[cfg(fuzzing)]
+  // The multiplicative `$'`/`$&` self-reinserting case: the after-match `$'`
+  // duplicates a still-`${…}`-bearing tail, so `result` doubles every pass.
+  // The iteration cap bounds only the additive case's O(cap²) time, never this
+  // case's memory, so the byte budget is what stops it — loudly, with an error,
+  // rather than by growing until the host runs out of memory. The committed seed
+  // `fuzz/corpus/parse_pipeline/craft-expand-multiplicative` drives the same
+  // input through the fuzz target.
   #[test]
-  fn fuzz_multiplicative_expand_is_size_bounded() {
+  fn multiplicative_expand_exceeds_the_byte_budget_and_errors() {
     // SET carries a live `${SET}` (escaped through expand, unescaped by parse)
     // plus a `$'`, so expanding `${SET}${SET}` duplicates the `${…}`-bearing
     // tail every pass.
-    let out = expand_env("${SET}${SET}", &env(&[("SET", "${SET}$'x")]));
-    // The output-size guard truncates and breaks, so the result stays within
-    // the budget (a normal build would grow it until OOM).
-    assert!(
-      out.len() <= FUZZ_MAX_EXPAND_OUTPUT_BYTES,
-      "fuzzing output-size guard must bound the multiplicative case \
-             (len={})",
-      out.len()
-    );
+    let e = env(&[("SET", "${SET}$'x")]);
+    let empty = IndexMap::new();
+    let err = expand("${SET}${SET}", &options(&e, &empty))
+      .expect_err("the doubling expansion must exceed the byte budget");
+    assert_eq!(err.max_output_bytes, DEFAULT_MAX_EXPAND_OUTPUT_BYTES);
+  }
+
+  #[test]
+  fn a_small_budget_bounds_the_work_and_never_truncates() {
+    // The budget is a hard stop, not a truncation point: an expansion that
+    // cannot fit returns the error, and no partial value escapes.
+    let e = env(&[("SET", "${SET}$'x")]);
+    let empty = IndexMap::new();
+    let err = expand(
+      "${SET}${SET}",
+      &ExpandOptions {
+        max_output_bytes: 64,
+        ..options(&e, &empty)
+      },
+    )
+    .expect_err("the doubling expansion must exceed a 64-byte budget");
+    assert_eq!(err.max_output_bytes, 64);
+
+    // A value that fits is untouched by the budget.
+    let e = env(&[("SET", "val")]);
+    let got = expand(
+      "${SET}",
+      &ExpandOptions {
+        max_output_bytes: 64,
+        ..options(&e, &empty)
+      },
+    )
+    .unwrap();
+    assert_eq!(got, "val");
+  }
+
+  fn replaced(haystack: &str, search: &str, replacement: &str) -> Option<String> {
+    match js_string_replace_first(
+      haystack,
+      search,
+      replacement,
+      DEFAULT_MAX_EXPAND_OUTPUT_BYTES,
+    ) {
+      Replaced::Value(v) => Some(v),
+      Replaced::Absent => None,
+      Replaced::TooLarge => panic!("the budget is far above these inputs"),
+    }
   }
 
   #[test]
   fn js_string_replace_first_substitution_patterns() {
     // ECMA-262 GetSubstitution for string-search replace.
-    assert_eq!(
-      js_string_replace_first("a-b-c", "-", "$$").as_deref(),
-      Some("a$b-c")
-    );
-    assert_eq!(
-      js_string_replace_first("a-b", "-", "[$&]").as_deref(),
-      Some("a[-]b")
-    );
-    assert_eq!(
-      js_string_replace_first("a-b", "-", "[$`]").as_deref(),
-      Some("a[a]b")
-    );
-    assert_eq!(
-      js_string_replace_first("a-b", "-", "[$']").as_deref(),
-      Some("a[b]b")
-    );
+    assert_eq!(replaced("a-b-c", "-", "$$").as_deref(), Some("a$b-c"));
+    assert_eq!(replaced("a-b", "-", "[$&]").as_deref(), Some("a[-]b"));
+    assert_eq!(replaced("a-b", "-", "[$`]").as_deref(), Some("a[a]b"));
+    assert_eq!(replaced("a-b", "-", "[$']").as_deref(), Some("a[b]b"));
     // `$1`/`$<` stay literal for string-search replace; lone/trailing `$` too.
     assert_eq!(
-      js_string_replace_first("a-b", "-", "$1$<x>$").as_deref(),
+      replaced("a-b", "-", "$1$<x>$").as_deref(),
       Some("a$1$<x>$b")
     );
-    assert_eq!(js_string_replace_first("a-b", "z", "r"), None);
+    assert_eq!(replaced("a-b", "z", "r"), None);
+  }
+
+  #[test]
+  fn js_string_replace_first_stops_at_the_budget() {
+    // The budget is enforced while the output is assembled, so an oversized
+    // result is never materialized.
+    assert!(matches!(
+      js_string_replace_first("a-b", "-", "0123456789", 8),
+      Replaced::TooLarge
+    ));
+    assert!(matches!(
+      js_string_replace_first("a-b", "-", "x", 3),
+      Replaced::Value(_)
+    ));
   }
 }
