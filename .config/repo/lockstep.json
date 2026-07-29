@@ -14,11 +14,9 @@
       "id": "socket-lib-paths",
       "upstream": "socket-lib",
       "criticality": 5,
-      "notes": "Rust port of socket-lib's path helpers (src/paths) in crates/envrypt/src/helpers/node_path.rs. Sparse: only the src/paths cone is vendored + counts as drift (matching .gitmodules sparse-checkout=src/paths); upstream commits outside src/paths are not drift. Locked: a socket-lib bump requires re-verifying the Rust port, so it is never auto-bumped.",
+      "notes": "Rust port of socket-lib's path helpers (src/paths) in crates/envrypt/src/helpers/node_path.rs. Sparse: only the src/paths cone is vendored + counts as drift (matching .gitmodules sparse-checkout=src/paths); upstream commits outside src/paths are not drift. Locked: a socket-lib bump requires re-verifying the Rust port, so it is never auto-bumped. The pin lives in .gitmodules and only there; this row derives it.",
       "materialization": "sparse",
       "sparse_cone": ["src/paths"],
-      "pinned_sha": "a7201b46983050b00479d3af124db712cfdf0fe6",
-      "pinned_tag": "6.1.0",
       "upgrade_policy": "locked"
     }
   ]
