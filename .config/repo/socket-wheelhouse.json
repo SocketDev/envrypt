@@ -1,0 +1,7 @@
+{
+  "$schema": "./socket-wheelhouse-schema.json",
+  "schemaVersion": 1,
+  "repoName": "envrypt",
+  "repo": { "type": "solo" },
+  "build": { "from": "crates-registry", "type": "rust" }
+}

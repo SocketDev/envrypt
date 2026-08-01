@@ -1,0 +1,9 @@
+# cargo-fuzz build output and crash artifacts are transient.
+/target
+/artifacts
+/coverage
+
+# The seed corpus IS committed (doc 11 §7.3). cargo-fuzz mutates copies in-place
+# during a run and drops newly-discovered inputs here; keep the checked-in seeds
+# but do not commit the fuzzer's own generated growth (regenerate via seed-corpus.sh).
+# (Explicit: corpus/ is tracked; nothing here ignores it.)

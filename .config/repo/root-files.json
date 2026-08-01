@@ -1,0 +1,5 @@
+{
+  "allow": {
+    "conformance": "envrypt cross-implementation conformance suite (cases, vectors, fixtures, runner) — load-bearing root anchor referenced by .github/workflows/rust.yml, crates/envrypt native tests and benches, and crates/test-support"
+  }
+}

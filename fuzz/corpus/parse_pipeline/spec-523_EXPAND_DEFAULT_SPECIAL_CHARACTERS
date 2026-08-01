@@ -1,0 +1,1 @@
+EXPAND_DEFAULT_SPECIAL_CHARACTERS=${MACHINE:-/default/path:with/colon}

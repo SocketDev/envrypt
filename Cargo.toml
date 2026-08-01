@@ -1,0 +1,110 @@
+[workspace]
+resolver = "2"
+members = ["crates/envrypt", "crates/test-support", "conformance/runner"]
+
+# The parent workspace excludes `fuzz/`: that workspace is standalone, with an
+# inverted profile and its own Cargo.lock.
+exclude = ["fuzz"]
+
+# The 0.x version signals the Rust API is not yet stable (the wire/file formats
+# are the real frozen compat contract). MIT-licensed. Toolchain: the fleet
+# nightly pin in rust-toolchain.toml.
+[workspace.package]
+version = "0.1.0-prerelease"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/SocketDev/envrypt"
+homepage = "https://envrypt.sh"
+
+[workspace.dependencies]
+# Internal crates.
+envrypt = { path = "crates/envrypt" }
+test-support = { path = "crates/test-support" }
+# The never-published conformance runner. Its own tests drive the tier-1 spec /
+# parser corpus through envrypt's parse pipeline (PV-07′, no binary). Dev edge only —
+# never in a shipped `-e normal` tree.
+envrypt-conformance = { path = "conformance/runner" }
+
+# WP-02 parser deps (doc 11 §4 WP-02). `fancy-regex` provides the backtracking +
+# lookbehind semantics the JS LINE/expand regexes need (doc 02 §12 items 3/4);
+# `regex` serves the lookaround-free patterns; `indexmap` is the insertion-ordered
+# map parity requirement (doc 02 §12 item 18); `memchr` backs the documented
+# expand gate. None pulls HTTP/openssl.
+fancy-regex = "0.14"
+regex = "1"
+indexmap = "2"
+memchr = "2"
+
+# v3 value-format crypto (docs/envrypt/crypto-v3.md) — all pure Rust, no C, no
+# openssl. `x25519-dalek` (recipient ECDH; `static_secrets` lets keygen + the
+# decryptor rebuild the long-lived scalar from stored bytes), `chacha20poly1305`
+# (XChaCha20-Poly1305 AEAD, 24-byte nonce), `argon2` (Argon2id passphrase KDF),
+# `subtle` (constant-time commitment compare). Workspace-pinned so the library
+# and the test-support vector helpers agree on versions.
+x25519-dalek = { version = "2.0", default-features = false, features = [
+  "alloc",
+  "precomputed-tables",
+  "zeroize",
+  "static_secrets",
+] }
+chacha20poly1305 = { version = "0.10", default-features = false, features = [
+  "alloc",
+] }
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+subtle = { version = "2.6", default-features = false }
+zeroize = { version = "1.9", default-features = false, features = ["alloc"] }
+
+# v1 wire-format primitives shared between the library (crates/envrypt) and the
+# test-support v1 vector writer (fresh v1 interop vectors are produced in-repo).
+aes-gcm = { version = "0.10", default-features = false, features = [
+  "aes",
+  "alloc",
+] }
+scrypt = { version = "0.11", default-features = false, features = ["std"] }
+rand_core = { version = "0.6", default-features = false, features = [
+  "getrandom",
+] }
+
+# Shared, pinned dev/test dependencies. Every one is a dev-dependency at its point
+# of use — none enters a shipped `-e normal` dependency tree. (`serde_json` and
+# `tempfile` are additionally normal deps of the never-published
+# `envrypt-conformance` harness crate; serde_json's `preserve_order` because JSON key
+# insertion order is contract — doc 08 §5.4.)
+#
+# PV-LIB (a)/(e) removed the CLI-only test deps `assert_cmd`/`assert_fs`/`predicates`
+# and the already-dead `wiremock`/`tokio`/`portable-pty` workspace decls (they entered
+# no tree after PV-01 removed the cloud tier + PV-LIB removed the bin/PTY exec).
+# PV-07′ removed `serde_yaml` — the only consumer was the deleted CLI-differential
+# `cli_case` YAML loader; the surviving `parses_to` corpus is JSON (`spec.json`).
+serde_json = { version = "1", features = ["preserve_order"] }
+tempfile = "3"
+
+# WP-20 benchmarks (doc 11 §6, §3 T10). criterion is a dev/bench-only dependency
+# of envrypt — it NEVER enters any shipped `-e normal` tree. `default-features
+# = false` + `cargo_bench_support` drops criterion's optional `plotters`/`rayon`
+# report machinery (doc 11 §8 item 6: no rayon Phase 1) while keeping the harness
+# runnable under `cargo bench`; the trimmed tree also keeps the openssl-sys CI gate
+# green (criterion pulls no TLS stack).
+criterion = { version = "0.5", default-features = false, features = [
+  "cargo_bench_support",
+] }
+
+# The release profile an embedding application inherits when it builds this crate.
+# Fat LTO plus one codegen unit trade compile time for the smallest, fastest
+# object code, which is the right trade for a library whose callers build once
+# and ship the result. `panic = "abort"` is safe here because the crate returns
+# errors and never unwinds across an FFI boundary.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+overflow-checks = false
+debug-assertions = false
+
+[profile.bench]
+inherits = "release"
+debug = true
+strip = "none"

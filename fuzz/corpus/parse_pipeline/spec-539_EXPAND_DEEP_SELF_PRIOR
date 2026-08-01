@@ -1,0 +1,3 @@
+BASIC=basic
+EXPAND_DEEP_SELF_PRIOR=foo
+EXPAND_DEEP_SELF_PRIOR=prefix2-${EXPAND_DEEP_SELF_PRIOR:-prefix1-${BASIC:-test}-suffix2}-suffix2

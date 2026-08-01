@@ -1,0 +1,10 @@
+# socket-lib-v6.2.3 sha256:b6ecd54420fea92527426b741c8f904c54f0fbccf9cb93553d1ee52e5f30dd6b
+[submodule "upstream/socket-lib"]
+	ignore = dirty
+	ref = 86b6a979b62275f6b1b2dc3b52aa2cf15bd9c158
+	path = upstream/socket-lib
+	url = https://github.com/SocketDev/socket-lib.git
+	branch = v6.2.3
+	sparse-checkout = src/paths
+	shallow = true
+	verify = none
