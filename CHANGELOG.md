@@ -11,6 +11,7 @@ value and file formats are the frozen compatibility contract.
 
 ### Added
 
+- **`parse`** — _remove command substitution and cap expansion output_
 - **`sockeye`** — read one-shot envrypt credentials
 - **`envrypt`** — initial release: a Rust library (no CLI) for encrypted `.env` files — reads a `.env`, and encrypts, decrypts, and generates keypairs for its `encrypted:` values.
 - **`load` / `config`** — load a `.env`, resolve the private key, and return the decrypted environment.
@@ -29,12 +30,15 @@ value and file formats are the frozen compatibility contract.
 
 ### Fixed
 
+- **`bench`** — derive real keys in the keyring benchmark
+- **`resolvers`** — _keep the private key out of the resolved environment_
 - **`paths`** — `.env` file paths resolve correctly on Windows.
 - **`secrets`** — resolver key material is zeroized after use.
 - **`sockeye`** — one-shot credentials are read through sockeye, the safe local path.
 
 ### Internal
 
+- **`config`** — move the fleet marker to the canonical .config/repo path
 - **`deps`** — absorb the fleet catalog heal
 - **`fleet`** — restore fetch-fleet-bundle to the v1.0.14 manifest bytes
 - **`deps`** — override js-yaml to 5.2.2 for GHSA-pm4m-ph32-ghv5
