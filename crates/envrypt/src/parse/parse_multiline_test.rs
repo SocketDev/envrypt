@@ -6,25 +6,25 @@ const EXPECTED_PEM: &str = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEF
 
 #[test]
 fn parses_multiline_values_and_split_key_value_lines() {
-  let out = parse_env(&fixture_src("root/.env.multiline"), &env(&[]));
-  assert_eq!(
-    value(&out, "MULTI_DOUBLE_QUOTED"),
-    "THIS\nIS\nA\nMULTILINE\nSTRING"
-  );
-  assert_eq!(
-    value(&out, "MULTI_SINGLE_QUOTED"),
-    "THIS\nIS\nA\nMULTILINE\nSTRING"
-  );
-  assert_eq!(
-    value(&out, "MULTI_BACKTICKED"),
-    "THIS\nIS\nA\n\"MULTILINE'S\"\nSTRING"
-  );
-  // Exact multiline PEM block.
-  assert_eq!(value(&out, "MULTI_PEM_DOUBLE_QUOTED"), EXPECTED_PEM);
-  // Split key/value lines.
-  assert_eq!(value(&out, "SPLIT_KEY_VALUE_LINES"), "split line");
-  assert_eq!(
-    value(&out, "SPLIT_KEY_VALUE_SPACED_LINES"),
-    "split line with spaces"
-  );
+    let out = parse_env(&fixture_src("root/.env.multiline"), &env(&[]));
+    assert_eq!(
+        value(&out, "MULTI_DOUBLE_QUOTED"),
+        "THIS\nIS\nA\nMULTILINE\nSTRING"
+    );
+    assert_eq!(
+        value(&out, "MULTI_SINGLE_QUOTED"),
+        "THIS\nIS\nA\nMULTILINE\nSTRING"
+    );
+    assert_eq!(
+        value(&out, "MULTI_BACKTICKED"),
+        "THIS\nIS\nA\n\"MULTILINE'S\"\nSTRING"
+    );
+    // Exact multiline PEM block.
+    assert_eq!(value(&out, "MULTI_PEM_DOUBLE_QUOTED"), EXPECTED_PEM);
+    // Split key/value lines.
+    assert_eq!(value(&out, "SPLIT_KEY_VALUE_LINES"), "split line");
+    assert_eq!(
+        value(&out, "SPLIT_KEY_VALUE_SPACED_LINES"),
+        "split line with spaces"
+    );
 }

@@ -85,9 +85,9 @@ const INFO_COMMIT: &[u8] = b"envrypt:v3:commit";
 pub struct V3Error;
 
 impl std::fmt::Display for V3Error {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str("v3 crypto operation failed")
-  }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("v3 crypto operation failed")
+    }
 }
 
 impl std::error::Error for V3Error {}
@@ -100,27 +100,27 @@ impl std::error::Error for V3Error {}
 /// Both keys are 32 bytes, hex-encoded (64 lowercase hex chars).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct V3Keypair {
-  /// The X25519 public key, 64 lowercase hex chars.
-  pub public_key: String,
-  /// The X25519 private key (clamped scalar seed), 64 lowercase hex chars.
-  pub private_key: String,
+    /// The X25519 public key, 64 lowercase hex chars.
+    pub public_key: String,
+    /// The X25519 private key (clamped scalar seed), 64 lowercase hex chars.
+    pub private_key: String,
 }
 
 /// Generate a fresh X25519 keypair (public hex = lowercase hex of the 32-byte
 /// public key).
 pub fn keypair_v3() -> V3Keypair {
-  let secret = StaticSecret::random_from_rng(OsRng);
-  let public = X25519Public::from(&secret);
-  V3Keypair {
-    public_key: hex_encode(public.as_bytes()),
-    private_key: hex_encode(&secret.to_bytes()),
-  }
+    let secret = StaticSecret::random_from_rng(OsRng);
+    let public = X25519Public::from(&secret);
+    V3Keypair {
+        public_key: hex_encode(public.as_bytes()),
+        private_key: hex_encode(&secret.to_bytes()),
+    }
 }
 
 /// Parse a 64-hex-char X25519 key into its 32 raw bytes.
 fn parse_key_hex(key_hex: &str) -> Result<[u8; 32], V3Error> {
-  let bytes = hex_decode(key_hex).ok_or(V3Error)?;
-  bytes.try_into().map_err(|_| V3Error)
+    let bytes = hex_decode(key_hex).ok_or(V3Error)?;
+    bytes.try_into().map_err(|_| V3Error)
 }
 
 /// Fuzz seam: derive the recipient public-key hex from a private-key hex so the
@@ -129,8 +129,8 @@ fn parse_key_hex(key_hex: &str) -> Result<[u8; 32], V3Error> {
 /// only under cargo-fuzz's `--cfg fuzzing`; production never sees this symbol.
 #[cfg(fuzzing)]
 pub fn fuzz_public_key_hex(private_key_hex: &str) -> Option<String> {
-  let secret = StaticSecret::from(parse_key_hex(private_key_hex).ok()?);
-  Some(hex_encode(X25519Public::from(&secret).as_bytes()))
+    let secret = StaticSecret::from(parse_key_hex(private_key_hex).ok()?);
+    Some(hex_encode(X25519Public::from(&secret).as_bytes()))
 }
 
 // ---------------------------------------------------------------------------
@@ -141,22 +141,22 @@ pub fn fuzz_public_key_hex(private_key_hex: &str) -> Option<String> {
 /// header. Defaults: `t = 3`, `m = 65536` KiB (64 MiB), `p = 1`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Argon2Params {
-  /// Time cost (iterations), header `argon_t_cost` (u32 BE).
-  pub t_cost: u32,
-  /// Memory cost in KiB, header `argon_m_cost` (u32 BE).
-  pub m_cost: u32,
-  /// Lanes (parallelism), header `argon_p` (u8).
-  pub p: u8,
+    /// Time cost (iterations), header `argon_t_cost` (u32 BE).
+    pub t_cost: u32,
+    /// Memory cost in KiB, header `argon_m_cost` (u32 BE).
+    pub m_cost: u32,
+    /// Lanes (parallelism), header `argon_p` (u8).
+    pub p: u8,
 }
 
 impl Default for Argon2Params {
-  fn default() -> Self {
-    Argon2Params {
-      t_cost: 3,
-      m_cost: 65536,
-      p: 1,
+    fn default() -> Self {
+        Argon2Params {
+            t_cost: 3,
+            m_cost: 65536,
+            p: 1,
+        }
     }
-  }
 }
 
 /// Work-factor ceiling: the largest `t_cost` accepted on both the write and the
@@ -175,26 +175,26 @@ pub const MAX_M_COST: u32 = 1 << 20;
 
 /// Derive the 32-byte Argon2id key for `passphrase`/`salt` under `params`.
 fn argon2id_key(passphrase: &str, salt: &[u8], params: &Argon2Params) -> Result<[u8; 32], V3Error> {
-  if params.t_cost > MAX_T_COST || params.m_cost > MAX_M_COST {
-    return Err(V3Error);
-  }
-  let algo_params = argon2::Params::new(
-    params.m_cost,
-    params.t_cost,
-    u32::from(params.p),
-    Some(KEY_LEN),
-  )
-  .map_err(|_| V3Error)?;
-  let argon = argon2::Argon2::new(
-    argon2::Algorithm::Argon2id,
-    argon2::Version::V0x13,
-    algo_params,
-  );
-  let mut key = [0u8; KEY_LEN];
-  argon
-    .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+    if params.t_cost > MAX_T_COST || params.m_cost > MAX_M_COST {
+        return Err(V3Error);
+    }
+    let algo_params = argon2::Params::new(
+        params.m_cost,
+        params.t_cost,
+        u32::from(params.p),
+        Some(KEY_LEN),
+    )
     .map_err(|_| V3Error)?;
-  Ok(key)
+    let argon = argon2::Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        algo_params,
+    );
+    let mut key = [0u8; KEY_LEN];
+    argon
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .map_err(|_| V3Error)?;
+    Ok(key)
 }
 
 // ---------------------------------------------------------------------------
@@ -203,58 +203,58 @@ fn argon2id_key(passphrase: &str, salt: &[u8], params: &Argon2Params) -> Result<
 
 /// The 4-byte recipient header: version, mode, aead_id, kdf_id = none.
 fn recipient_header() -> [u8; RECIPIENT_HEADER_LEN] {
-  [
-    VERSION_V3,
-    MODE_RECIPIENT,
-    AEAD_XCHACHA20_POLY1305,
-    KDF_NONE,
-  ]
+    [
+        VERSION_V3,
+        MODE_RECIPIENT,
+        AEAD_XCHACHA20_POLY1305,
+        KDF_NONE,
+    ]
 }
 
 /// The 13-byte passphrase header: the four id bytes plus the Argon2id params
 /// (t_cost u32 BE, m_cost u32 BE, p u8).
 fn passphrase_header(params: &Argon2Params) -> [u8; PASSPHRASE_HEADER_LEN] {
-  let mut header = [0u8; PASSPHRASE_HEADER_LEN];
-  header[0] = VERSION_V3;
-  header[1] = MODE_PASSPHRASE;
-  header[2] = AEAD_XCHACHA20_POLY1305;
-  header[3] = KDF_ARGON2ID;
-  header[4..8].copy_from_slice(&params.t_cost.to_be_bytes());
-  header[8..12].copy_from_slice(&params.m_cost.to_be_bytes());
-  header[12] = params.p;
-  header
+    let mut header = [0u8; PASSPHRASE_HEADER_LEN];
+    header[0] = VERSION_V3;
+    header[1] = MODE_PASSPHRASE;
+    header[2] = AEAD_XCHACHA20_POLY1305;
+    header[3] = KDF_ARGON2ID;
+    header[4..8].copy_from_slice(&params.t_cost.to_be_bytes());
+    header[8..12].copy_from_slice(&params.m_cost.to_be_bytes());
+    header[12] = params.p;
+    header
 }
 
 /// `AAD = header || 0x00 || variable_name_utf8`. The `0x00` separator keeps a
 /// header/name pair from colliding with any other split of the same bytes.
 fn build_aad(header: &[u8], var_name: &str) -> Vec<u8> {
-  let mut aad = Vec::with_capacity(header.len() + 1 + var_name.len());
-  aad.extend_from_slice(header);
-  aad.push(0x00);
-  aad.extend_from_slice(var_name.as_bytes());
-  aad
+    let mut aad = Vec::with_capacity(header.len() + 1 + var_name.len());
+    aad.extend_from_slice(header);
+    aad.push(0x00);
+    aad.extend_from_slice(var_name.as_bytes());
+    aad
 }
 
 /// `commitment = HKDF-SHA256(ikm = key, salt = ∅, info = "envrypt:v3:commit", 32 B)`.
 fn commitment(key: &[u8; KEY_LEN]) -> [u8; COMMITMENT_LEN] {
-  hkdf_sha256(key, INFO_COMMIT)
+    hkdf_sha256(key, INFO_COMMIT)
 }
 
 /// Recipient key schedule: `HKDF-SHA256(ikm = shared, salt = ∅,
 /// info = "envrypt:v3:recip" || eph_pub, 32 B)`.
 fn recipient_key(shared: &[u8; 32], eph_pub: &[u8; X25519_PUBLIC_LEN]) -> [u8; KEY_LEN] {
-  let mut info = Vec::with_capacity(INFO_RECIPIENT.len() + X25519_PUBLIC_LEN);
-  info.extend_from_slice(INFO_RECIPIENT);
-  info.extend_from_slice(eph_pub);
-  hkdf_sha256(shared, &info)
+    let mut info = Vec::with_capacity(INFO_RECIPIENT.len() + X25519_PUBLIC_LEN);
+    info.extend_from_slice(INFO_RECIPIENT);
+    info.extend_from_slice(eph_pub);
+    hkdf_sha256(shared, &info)
 }
 
 fn hkdf_sha256(ikm: &[u8], info: &[u8]) -> [u8; 32] {
-  let hk = Hkdf::<Sha256>::new(None, ikm);
-  let mut okm = [0u8; 32];
-  hk.expand(info, &mut okm)
-    .expect("32 bytes is a valid HKDF-SHA256 output length");
-  okm
+    let hk = Hkdf::<Sha256>::new(None, ikm);
+    let mut okm = [0u8; 32];
+    hk.expand(info, &mut okm)
+        .expect("32 bytes is a valid HKDF-SHA256 output length");
+    okm
 }
 
 // ---------------------------------------------------------------------------
@@ -264,70 +264,70 @@ fn hkdf_sha256(ikm: &[u8], info: &[u8]) -> [u8; 32] {
 /// Encrypt `plaintext` under `key` with a fresh 24-byte nonce and the v3 AAD,
 /// returning `(nonce, commitment, tag, ciphertext)` ready for payload assembly.
 fn seal(
-  key: &[u8; KEY_LEN],
-  header: &[u8],
-  var_name: &str,
-  plaintext: &[u8],
+    key: &[u8; KEY_LEN],
+    header: &[u8],
+    var_name: &str,
+    plaintext: &[u8],
 ) -> ([u8; NONCE_LEN], [u8; COMMITMENT_LEN], Vec<u8>, Vec<u8>) {
-  let mut nonce = [0u8; NONCE_LEN];
-  OsRng.fill_bytes(&mut nonce);
+    let mut nonce = [0u8; NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce);
 
-  let aad = build_aad(header, var_name);
-  let cipher = XChaCha20Poly1305::new(&(*key).into());
-  let mut ct_and_tag = cipher
-    .encrypt(
-      &nonce.into(),
-      Payload {
-        msg: plaintext,
-        aad: &aad,
-      },
-    )
-    .expect("XChaCha20-Poly1305 encryption of an in-memory buffer cannot fail");
-  // The AEAD emits ct || tag; the payload stores the tag BEFORE the ciphertext
-  // (the file-format convention shared with the v1 layouts).
-  let tag = ct_and_tag.split_off(ct_and_tag.len() - TAG_LEN);
-  let ciphertext = ct_and_tag;
+    let aad = build_aad(header, var_name);
+    let cipher = XChaCha20Poly1305::new(&(*key).into());
+    let mut ct_and_tag = cipher
+        .encrypt(
+            &nonce.into(),
+            Payload {
+                msg: plaintext,
+                aad: &aad,
+            },
+        )
+        .expect("XChaCha20-Poly1305 encryption of an in-memory buffer cannot fail");
+    // The AEAD emits ct || tag; the payload stores the tag BEFORE the ciphertext
+    // (the file-format convention shared with the v1 layouts).
+    let tag = ct_and_tag.split_off(ct_and_tag.len() - TAG_LEN);
+    let ciphertext = ct_and_tag;
 
-  (nonce, commitment(key), tag, ciphertext)
+    (nonce, commitment(key), tag, ciphertext)
 }
 
 /// Decrypt-order steps 3–5 (spec: "Decrypt order"): constant-time commitment
 /// check **before** the AEAD, then XChaCha20-Poly1305 open, then strict UTF-8.
 fn open(
-  key: &[u8; KEY_LEN],
-  header: &[u8],
-  var_name: &str,
-  stored_commitment: &[u8],
-  nonce: &[u8],
-  tag: &[u8],
-  ciphertext: &[u8],
+    key: &[u8; KEY_LEN],
+    header: &[u8],
+    var_name: &str,
+    stored_commitment: &[u8],
+    nonce: &[u8],
+    tag: &[u8],
+    ciphertext: &[u8],
 ) -> Result<String, V3Error> {
-  // Step 3 — recompute the commitment; constant-time compare; mismatch fails
-  // before any AEAD work (a wrong key/passphrase stops here).
-  let expected = commitment(key);
-  if expected.as_slice().ct_eq(stored_commitment).unwrap_u8() != 1 {
-    return Err(V3Error);
-  }
+    // Step 3 — recompute the commitment; constant-time compare; mismatch fails
+    // before any AEAD work (a wrong key/passphrase stops here).
+    let expected = commitment(key);
+    if expected.as_slice().ct_eq(stored_commitment).unwrap_u8() != 1 {
+        return Err(V3Error);
+    }
 
-  // Step 4 — rebuild the AAD and open. The aead crate wants ct || tag; the
-  // payload stores tag || ct, so reassemble.
-  let aad = build_aad(header, var_name);
-  let mut ct_and_tag = Vec::with_capacity(ciphertext.len() + tag.len());
-  ct_and_tag.extend_from_slice(ciphertext);
-  ct_and_tag.extend_from_slice(tag);
-  let cipher = XChaCha20Poly1305::new(&(*key).into());
-  let plaintext = cipher
-    .decrypt(
-      nonce.into(),
-      Payload {
-        msg: &ct_and_tag,
-        aad: &aad,
-      },
-    )
-    .map_err(|_| V3Error)?;
+    // Step 4 — rebuild the AAD and open. The aead crate wants ct || tag; the
+    // payload stores tag || ct, so reassemble.
+    let aad = build_aad(header, var_name);
+    let mut ct_and_tag = Vec::with_capacity(ciphertext.len() + tag.len());
+    ct_and_tag.extend_from_slice(ciphertext);
+    ct_and_tag.extend_from_slice(tag);
+    let cipher = XChaCha20Poly1305::new(&(*key).into());
+    let plaintext = cipher
+        .decrypt(
+            nonce.into(),
+            Payload {
+                msg: &ct_and_tag,
+                aad: &aad,
+            },
+        )
+        .map_err(|_| V3Error)?;
 
-  // Step 5 — strict UTF-8.
-  String::from_utf8(plaintext).map_err(|_| V3Error)
+    // Step 5 — strict UTF-8.
+    String::from_utf8(plaintext).map_err(|_| V3Error)
 }
 
 // ---------------------------------------------------------------------------
@@ -337,109 +337,109 @@ fn open(
 /// Assemble a recipient payload from raw parts (also drives the non-UTF-8
 /// coverage path in unit tests, which is why it takes byte plaintext).
 fn seal_recipient(
-  recipient_public: &[u8; X25519_PUBLIC_LEN],
-  plaintext: &[u8],
-  var_name: &str,
+    recipient_public: &[u8; X25519_PUBLIC_LEN],
+    plaintext: &[u8],
+    var_name: &str,
 ) -> Vec<u8> {
-  let header = recipient_header();
+    let header = recipient_header();
 
-  // Fresh ephemeral X25519 keypair per value.
-  let ephemeral = EphemeralSecret::random_from_rng(OsRng);
-  let eph_pub = X25519Public::from(&ephemeral);
-  let shared = ephemeral.diffie_hellman(&X25519Public::from(*recipient_public));
-  let key = recipient_key(shared.as_bytes(), eph_pub.as_bytes());
+    // Fresh ephemeral X25519 keypair per value.
+    let ephemeral = EphemeralSecret::random_from_rng(OsRng);
+    let eph_pub = X25519Public::from(&ephemeral);
+    let shared = ephemeral.diffie_hellman(&X25519Public::from(*recipient_public));
+    let key = recipient_key(shared.as_bytes(), eph_pub.as_bytes());
 
-  let (nonce, commit, tag, ciphertext) = seal(&key, &header, var_name, plaintext);
+    let (nonce, commit, tag, ciphertext) = seal(&key, &header, var_name, plaintext);
 
-  // payload = header(4) | eph_pub(32) | nonce(24) | commitment(32) | tag(16) | ct
-  let mut payload = Vec::with_capacity(
-    RECIPIENT_HEADER_LEN
-      + X25519_PUBLIC_LEN
-      + NONCE_LEN
-      + COMMITMENT_LEN
-      + TAG_LEN
-      + ciphertext.len(),
-  );
-  payload.extend_from_slice(&header);
-  payload.extend_from_slice(eph_pub.as_bytes());
-  payload.extend_from_slice(&nonce);
-  payload.extend_from_slice(&commit);
-  payload.extend_from_slice(&tag);
-  payload.extend_from_slice(&ciphertext);
-  payload
+    // payload = header(4) | eph_pub(32) | nonce(24) | commitment(32) | tag(16) | ct
+    let mut payload = Vec::with_capacity(
+        RECIPIENT_HEADER_LEN
+            + X25519_PUBLIC_LEN
+            + NONCE_LEN
+            + COMMITMENT_LEN
+            + TAG_LEN
+            + ciphertext.len(),
+    );
+    payload.extend_from_slice(&header);
+    payload.extend_from_slice(eph_pub.as_bytes());
+    payload.extend_from_slice(&nonce);
+    payload.extend_from_slice(&commit);
+    payload.extend_from_slice(&tag);
+    payload.extend_from_slice(&ciphertext);
+    payload
 }
 
 /// Encrypt `plaintext` for the variable `var_name` to an X25519 recipient,
 /// producing the v3 `encrypted:<base64url(payload)>` string form (base64url,
 /// no padding). Fails (opaquely) on a malformed recipient key.
 pub fn encrypt_v3(
-  recipient_public_key_hex: &str,
-  plaintext: &str,
-  var_name: &str,
+    recipient_public_key_hex: &str,
+    plaintext: &str,
+    var_name: &str,
 ) -> Result<String, V3Error> {
-  let recipient = parse_key_hex(recipient_public_key_hex)?;
-  let payload = seal_recipient(&recipient, plaintext.as_bytes(), var_name);
-  Ok(format!("{ENCRYPTED_PREFIX}{}", base64url_encode(&payload)))
+    let recipient = parse_key_hex(recipient_public_key_hex)?;
+    let payload = seal_recipient(&recipient, plaintext.as_bytes(), var_name);
+    Ok(format!("{ENCRYPTED_PREFIX}{}", base64url_encode(&payload)))
 }
 
 /// Decrypt a v3 `encrypted:` value sealed for `var_name` with the recipient's
 /// X25519 private key. Every failure is the opaque [`V3Error`].
 pub fn decrypt_v3(
-  private_key_hex: &str,
-  encrypted_value: &str,
-  var_name: &str,
+    private_key_hex: &str,
+    encrypted_value: &str,
+    var_name: &str,
 ) -> Result<String, V3Error> {
-  let payload_b64 = encrypted_value
-    .strip_prefix(ENCRYPTED_PREFIX)
-    .ok_or(V3Error)?;
-  let payload = base64url_decode(payload_b64).ok_or(V3Error)?;
-  open_recipient(private_key_hex, &payload, var_name)
+    let payload_b64 = encrypted_value
+        .strip_prefix(ENCRYPTED_PREFIX)
+        .ok_or(V3Error)?;
+    let payload = base64url_decode(payload_b64).ok_or(V3Error)?;
+    open_recipient(private_key_hex, &payload, var_name)
 }
 
 /// Decrypt-order steps 1–2 for recipient mode: parse/validate the header,
 /// derive the key via ECDH + HKDF, then hand off to [`open`].
 fn open_recipient(
-  private_key_hex: &str,
-  payload: &[u8],
-  var_name: &str,
+    private_key_hex: &str,
+    payload: &[u8],
+    var_name: &str,
 ) -> Result<String, V3Error> {
-  // Step 1 — read the header; reject unknown version/mode/aead_id/kdf_id.
-  let min = RECIPIENT_HEADER_LEN + X25519_PUBLIC_LEN + NONCE_LEN + COMMITMENT_LEN + TAG_LEN;
-  if payload.len() < min {
-    return Err(V3Error);
-  }
-  let header = &payload[..RECIPIENT_HEADER_LEN];
-  if header != recipient_header().as_slice() {
-    return Err(V3Error);
-  }
+    // Step 1 — read the header; reject unknown version/mode/aead_id/kdf_id.
+    let min = RECIPIENT_HEADER_LEN + X25519_PUBLIC_LEN + NONCE_LEN + COMMITMENT_LEN + TAG_LEN;
+    if payload.len() < min {
+        return Err(V3Error);
+    }
+    let header = &payload[..RECIPIENT_HEADER_LEN];
+    if header != recipient_header().as_slice() {
+        return Err(V3Error);
+    }
 
-  let mut at = RECIPIENT_HEADER_LEN;
-  let eph_pub: [u8; X25519_PUBLIC_LEN] = payload[at..at + X25519_PUBLIC_LEN]
-    .try_into()
-    .expect("length checked");
-  at += X25519_PUBLIC_LEN;
-  let nonce = &payload[at..at + NONCE_LEN];
-  at += NONCE_LEN;
-  let stored_commitment = &payload[at..at + COMMITMENT_LEN];
-  at += COMMITMENT_LEN;
-  let tag = &payload[at..at + TAG_LEN];
-  at += TAG_LEN;
-  let ciphertext = &payload[at..];
+    let mut at = RECIPIENT_HEADER_LEN;
+    let eph_pub: [u8; X25519_PUBLIC_LEN] = payload[at..at + X25519_PUBLIC_LEN]
+        .try_into()
+        .expect("length checked");
+    at += X25519_PUBLIC_LEN;
+    let nonce = &payload[at..at + NONCE_LEN];
+    at += NONCE_LEN;
+    let stored_commitment = &payload[at..at + COMMITMENT_LEN];
+    at += COMMITMENT_LEN;
+    let tag = &payload[at..at + TAG_LEN];
+    at += TAG_LEN;
+    let ciphertext = &payload[at..];
 
-  // Step 2 — derive the key (ECDH + HKDF bound to this exact handshake).
-  let secret = StaticSecret::from(parse_key_hex(private_key_hex)?);
-  let shared = secret.diffie_hellman(&X25519Public::from(eph_pub));
-  let key = recipient_key(shared.as_bytes(), &eph_pub);
+    // Step 2 — derive the key (ECDH + HKDF bound to this exact handshake).
+    let secret = StaticSecret::from(parse_key_hex(private_key_hex)?);
+    let shared = secret.diffie_hellman(&X25519Public::from(eph_pub));
+    let key = recipient_key(shared.as_bytes(), &eph_pub);
 
-  open(
-    &key,
-    header,
-    var_name,
-    stored_commitment,
-    nonce,
-    tag,
-    ciphertext,
-  )
+    open(
+        &key,
+        header,
+        var_name,
+        stored_commitment,
+        nonce,
+        tag,
+        ciphertext,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -449,30 +449,30 @@ fn open_recipient(
 /// Assemble a passphrase payload from raw parts (byte plaintext for the same
 /// coverage reason as [`seal_recipient`]).
 fn seal_passphrase(
-  passphrase: &str,
-  plaintext: &[u8],
-  var_name: &str,
-  params: &Argon2Params,
+    passphrase: &str,
+    plaintext: &[u8],
+    var_name: &str,
+    params: &Argon2Params,
 ) -> Result<Vec<u8>, V3Error> {
-  let header = passphrase_header(params);
+    let header = passphrase_header(params);
 
-  let mut salt = [0u8; SALT_LEN];
-  OsRng.fill_bytes(&mut salt);
-  let key = argon2id_key(passphrase, &salt, params)?;
+    let mut salt = [0u8; SALT_LEN];
+    OsRng.fill_bytes(&mut salt);
+    let key = argon2id_key(passphrase, &salt, params)?;
 
-  let (nonce, commit, tag, ciphertext) = seal(&key, &header, var_name, plaintext);
+    let (nonce, commit, tag, ciphertext) = seal(&key, &header, var_name, plaintext);
 
-  // payload = header(13) | salt(16) | nonce(24) | commitment(32) | tag(16) | ct
-  let mut payload = Vec::with_capacity(
-    PASSPHRASE_HEADER_LEN + SALT_LEN + NONCE_LEN + COMMITMENT_LEN + TAG_LEN + ciphertext.len(),
-  );
-  payload.extend_from_slice(&header);
-  payload.extend_from_slice(&salt);
-  payload.extend_from_slice(&nonce);
-  payload.extend_from_slice(&commit);
-  payload.extend_from_slice(&tag);
-  payload.extend_from_slice(&ciphertext);
-  Ok(payload)
+    // payload = header(13) | salt(16) | nonce(24) | commitment(32) | tag(16) | ct
+    let mut payload = Vec::with_capacity(
+        PASSPHRASE_HEADER_LEN + SALT_LEN + NONCE_LEN + COMMITMENT_LEN + TAG_LEN + ciphertext.len(),
+    );
+    payload.extend_from_slice(&header);
+    payload.extend_from_slice(&salt);
+    payload.extend_from_slice(&nonce);
+    payload.extend_from_slice(&commit);
+    payload.extend_from_slice(&tag);
+    payload.extend_from_slice(&ciphertext);
+    Ok(payload)
 }
 
 /// Lock `plaintext` (typically a private key) for the variable `var_name` under
@@ -481,83 +481,83 @@ fn seal_passphrase(
 /// locked value pairs with, echoed into the string frame exactly like v1.
 /// Fails (opaquely) on unusable Argon2 parameters.
 pub fn lock_v3(
-  public_key_hex: &str,
-  plaintext: &str,
-  passphrase: &str,
-  var_name: &str,
-  params: &Argon2Params,
+    public_key_hex: &str,
+    plaintext: &str,
+    passphrase: &str,
+    var_name: &str,
+    params: &Argon2Params,
 ) -> Result<String, V3Error> {
-  let payload = seal_passphrase(passphrase, plaintext.as_bytes(), var_name, params)?;
-  Ok(format!(
-    "{LOCKED_PREFIX}{public_key_hex}:{}",
-    base64url_encode(&payload)
-  ))
+    let payload = seal_passphrase(passphrase, plaintext.as_bytes(), var_name, params)?;
+    Ok(format!(
+        "{LOCKED_PREFIX}{public_key_hex}:{}",
+        base64url_encode(&payload)
+    ))
 }
 
 /// Unlock a v3 `locked:` value sealed for `var_name` with its passphrase.
 /// Every failure is the opaque [`V3Error`].
 pub fn unlock_v3(locked_value: &str, passphrase: &str, var_name: &str) -> Result<String, V3Error> {
-  let payload = locked_payload(locked_value).ok_or(V3Error)?;
-  open_passphrase(passphrase, &payload, var_name)
+    let payload = locked_payload(locked_value).ok_or(V3Error)?;
+    open_passphrase(passphrase, &payload, var_name)
 }
 
 /// Extract the decoded payload of a `locked:<pub>:<base64url>` string
 /// (everything after the second `:` is the payload, exactly like v1 parsing).
 fn locked_payload(locked_value: &str) -> Option<Vec<u8>> {
-  let rest = locked_value.strip_prefix(LOCKED_PREFIX)?;
-  let (_public_hex, payload_b64) = rest.split_once(':')?;
-  base64url_decode(payload_b64)
+    let rest = locked_value.strip_prefix(LOCKED_PREFIX)?;
+    let (_public_hex, payload_b64) = rest.split_once(':')?;
+    base64url_decode(payload_b64)
 }
 
 /// Decrypt-order steps 1–2 for passphrase mode: parse/validate the header
 /// (including the authenticated Argon2id params), derive the key, hand off to
 /// [`open`].
 fn open_passphrase(passphrase: &str, payload: &[u8], var_name: &str) -> Result<String, V3Error> {
-  // Step 1 — read the header; reject unknown version/mode/aead_id/kdf_id.
-  let min = PASSPHRASE_HEADER_LEN + SALT_LEN + NONCE_LEN + COMMITMENT_LEN + TAG_LEN;
-  if payload.len() < min {
-    return Err(V3Error);
-  }
-  let header = &payload[..PASSPHRASE_HEADER_LEN];
-  if header[..4]
-    != [
-      VERSION_V3,
-      MODE_PASSPHRASE,
-      AEAD_XCHACHA20_POLY1305,
-      KDF_ARGON2ID,
-    ]
-  {
-    return Err(V3Error);
-  }
-  let params = Argon2Params {
-    t_cost: u32::from_be_bytes(header[4..8].try_into().expect("length checked")),
-    m_cost: u32::from_be_bytes(header[8..12].try_into().expect("length checked")),
-    p: header[12],
-  };
+    // Step 1 — read the header; reject unknown version/mode/aead_id/kdf_id.
+    let min = PASSPHRASE_HEADER_LEN + SALT_LEN + NONCE_LEN + COMMITMENT_LEN + TAG_LEN;
+    if payload.len() < min {
+        return Err(V3Error);
+    }
+    let header = &payload[..PASSPHRASE_HEADER_LEN];
+    if header[..4]
+        != [
+            VERSION_V3,
+            MODE_PASSPHRASE,
+            AEAD_XCHACHA20_POLY1305,
+            KDF_ARGON2ID,
+        ]
+    {
+        return Err(V3Error);
+    }
+    let params = Argon2Params {
+        t_cost: u32::from_be_bytes(header[4..8].try_into().expect("length checked")),
+        m_cost: u32::from_be_bytes(header[8..12].try_into().expect("length checked")),
+        p: header[12],
+    };
 
-  let mut at = PASSPHRASE_HEADER_LEN;
-  let salt = &payload[at..at + SALT_LEN];
-  at += SALT_LEN;
-  let nonce = &payload[at..at + NONCE_LEN];
-  at += NONCE_LEN;
-  let stored_commitment = &payload[at..at + COMMITMENT_LEN];
-  at += COMMITMENT_LEN;
-  let tag = &payload[at..at + TAG_LEN];
-  at += TAG_LEN;
-  let ciphertext = &payload[at..];
+    let mut at = PASSPHRASE_HEADER_LEN;
+    let salt = &payload[at..at + SALT_LEN];
+    at += SALT_LEN;
+    let nonce = &payload[at..at + NONCE_LEN];
+    at += NONCE_LEN;
+    let stored_commitment = &payload[at..at + COMMITMENT_LEN];
+    at += COMMITMENT_LEN;
+    let tag = &payload[at..at + TAG_LEN];
+    at += TAG_LEN;
+    let ciphertext = &payload[at..];
 
-  // Step 2 — derive the key with the params from the (authenticated) header.
-  let key = argon2id_key(passphrase, salt, &params)?;
+    // Step 2 — derive the key with the params from the (authenticated) header.
+    let key = argon2id_key(passphrase, salt, &params)?;
 
-  open(
-    &key,
-    header,
-    var_name,
-    stored_commitment,
-    nonce,
-    tag,
-    ciphertext,
-  )
+    open(
+        &key,
+        header,
+        var_name,
+        stored_commitment,
+        nonce,
+        tag,
+        ciphertext,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -570,41 +570,41 @@ fn open_passphrase(passphrase: &str, payload: &[u8], var_name: &str) -> Result<S
 /// name. A value without the `encrypted:` prefix passes through unchanged
 /// (identical to the v1 pass-through contract).
 pub fn decrypt_entry(
-  private_key_hex: &str,
-  value: &str,
-  var_name: &str,
+    private_key_hex: &str,
+    value: &str,
+    var_name: &str,
 ) -> Result<String, CryptoError> {
-  let Some(payload_b64) = value.strip_prefix(ENCRYPTED_PREFIX) else {
-    return Ok(value.to_string());
-  };
-  if first_payload_byte(payload_b64) == Some(VERSION_V3) {
-    return decrypt_v3(private_key_hex, value, var_name).map_err(opaque_crypto_error);
-  }
-  crate::crypto::decrypt(private_key_hex, value, true)
+    let Some(payload_b64) = value.strip_prefix(ENCRYPTED_PREFIX) else {
+        return Ok(value.to_string());
+    };
+    if first_payload_byte(payload_b64) == Some(VERSION_V3) {
+        return decrypt_v3(private_key_hex, value, var_name).map_err(opaque_crypto_error);
+    }
+    crate::crypto::decrypt(private_key_hex, value, true)
 }
 
 /// Unlock one `locked:` value, routing on the payload version byte: first byte
 /// `0x03` → the v3 passphrase path (name-bound); anything else → the legacy v1
 /// path in [`crate::services::lock::unlock_value`], which ignores the name.
 pub fn unlock_entry(locked_value: &str, passphrase: &str, var_name: &str) -> Option<String> {
-  let payload_b64 = locked_value
-    .strip_prefix(LOCKED_PREFIX)
-    .and_then(|rest| rest.split_once(':'))
-    .map(|(_public, payload)| payload);
-  if payload_b64.and_then(first_payload_byte) == Some(VERSION_V3) {
-    return unlock_v3(locked_value, passphrase, var_name).ok();
-  }
-  crate::services::lock::unlock_value(locked_value, passphrase)
+    let payload_b64 = locked_value
+        .strip_prefix(LOCKED_PREFIX)
+        .and_then(|rest| rest.split_once(':'))
+        .map(|(_public, payload)| payload);
+    if payload_b64.and_then(first_payload_byte) == Some(VERSION_V3) {
+        return unlock_v3(locked_value, passphrase, var_name).ok();
+    }
+    crate::services::lock::unlock_value(locked_value, passphrase)
 }
 
 /// Map the opaque v3 error into the pipeline's error shape without adding any
 /// detail (the message stays uniform for every v3 failure).
 fn opaque_crypto_error(_: V3Error) -> CryptoError {
-  CryptoError {
-    code: Some(CryptoErrorCode::DecryptionFailed),
-    message: "[DECRYPTION_FAILED] could not decrypt value".to_string(),
-    help: None,
-  }
+    CryptoError {
+        code: Some(CryptoErrorCode::DecryptionFailed),
+        message: "[DECRYPTION_FAILED] could not decrypt value".to_string(),
+        help: None,
+    }
 }
 
 /// Decode the first payload byte for routing. Tolerant of BOTH base64 alphabets
@@ -612,24 +612,24 @@ fn opaque_crypto_error(_: V3Error) -> CryptoError {
 /// every character that can encode a first byte, so routing never misreads a
 /// version byte.
 fn first_payload_byte(payload_b64: &str) -> Option<u8> {
-  let mut sextets = [0u8; 2];
-  let mut have = 0;
-  for c in payload_b64.bytes() {
-    let val = match c {
-      b'A'..=b'Z' => c - b'A',
-      b'a'..=b'z' => c - b'a' + 26,
-      b'0'..=b'9' => c - b'0' + 52,
-      b'+' | b'-' => 62,
-      b'/' | b'_' => 63,
-      _ => return None,
-    };
-    sextets[have] = val;
-    have += 1;
-    if have == 2 {
-      return Some(sextets[0] << 2 | sextets[1] >> 4);
+    let mut sextets = [0u8; 2];
+    let mut have = 0;
+    for c in payload_b64.bytes() {
+        let val = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            _ => return None,
+        };
+        sextets[have] = val;
+        have += 1;
+        if have == 2 {
+            return Some(sextets[0] << 2 | sextets[1] >> 4);
+        }
     }
-  }
-  None
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -641,92 +641,92 @@ const B64URL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 /// Encode bytes as unpadded URL-safe base64 (the v3 payload encoding, shared
 /// with the v1 `locked:` frame).
 fn base64url_encode(bytes: &[u8]) -> String {
-  let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-  let (chunks, rem) = bytes.as_chunks::<3>();
-  for chunk in chunks {
-    let acc = u32::from(chunk[0]) << 16 | u32::from(chunk[1]) << 8 | u32::from(chunk[2]);
-    for shift in [18, 12, 6, 0] {
-      out.push(B64URL[(acc >> shift & 0x3f) as usize] as char);
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    let (chunks, rem) = bytes.as_chunks::<3>();
+    for chunk in chunks {
+        let acc = u32::from(chunk[0]) << 16 | u32::from(chunk[1]) << 8 | u32::from(chunk[2]);
+        for shift in [18, 12, 6, 0] {
+            out.push(B64URL[(acc >> shift & 0x3f) as usize] as char);
+        }
     }
-  }
-  match *rem {
-    [a] => {
-      let acc = u32::from(a) << 16;
-      out.push(B64URL[(acc >> 18 & 0x3f) as usize] as char);
-      out.push(B64URL[(acc >> 12 & 0x3f) as usize] as char);
+    match *rem {
+        [a] => {
+            let acc = u32::from(a) << 16;
+            out.push(B64URL[(acc >> 18 & 0x3f) as usize] as char);
+            out.push(B64URL[(acc >> 12 & 0x3f) as usize] as char);
+        }
+        [a, b] => {
+            let acc = u32::from(a) << 16 | u32::from(b) << 8;
+            out.push(B64URL[(acc >> 18 & 0x3f) as usize] as char);
+            out.push(B64URL[(acc >> 12 & 0x3f) as usize] as char);
+            out.push(B64URL[(acc >> 6 & 0x3f) as usize] as char);
+        }
+        _ => {}
     }
-    [a, b] => {
-      let acc = u32::from(a) << 16 | u32::from(b) << 8;
-      out.push(B64URL[(acc >> 18 & 0x3f) as usize] as char);
-      out.push(B64URL[(acc >> 12 & 0x3f) as usize] as char);
-      out.push(B64URL[(acc >> 6 & 0x3f) as usize] as char);
-    }
-    _ => {}
-  }
-  out
+    out
 }
 
 /// Strict unpadded base64url decode: URL-safe alphabet only, no `=`, no
 /// whitespace, and a lone trailing sextet is malformed.
 fn base64url_decode(s: &str) -> Option<Vec<u8>> {
-  fn val(c: u8) -> Option<u8> {
-    match c {
-      b'A'..=b'Z' => Some(c - b'A'),
-      b'a'..=b'z' => Some(c - b'a' + 26),
-      b'0'..=b'9' => Some(c - b'0' + 52),
-      b'-' => Some(62),
-      b'_' => Some(63),
-      _ => None,
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'-' => Some(62),
+            b'_' => Some(63),
+            _ => None,
+        }
     }
-  }
-  let bytes = s.as_bytes();
-  let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
-  for chunk in bytes.chunks(4) {
-    if chunk.len() == 1 {
-      return None;
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+    for chunk in bytes.chunks(4) {
+        if chunk.len() == 1 {
+            return None;
+        }
+        let mut acc = 0u32;
+        for &c in chunk {
+            acc = acc << 6 | u32::from(val(c)?);
+        }
+        let pad = 4 - chunk.len();
+        acc <<= 6 * pad as u32;
+        let be = acc.to_be_bytes();
+        out.extend_from_slice(&be[1..4 - pad]);
     }
-    let mut acc = 0u32;
-    for &c in chunk {
-      acc = acc << 6 | u32::from(val(c)?);
-    }
-    let pad = 4 - chunk.len();
-    acc <<= 6 * pad as u32;
-    let be = acc.to_be_bytes();
-    out.extend_from_slice(&be[1..4 - pad]);
-  }
-  Some(out)
+    Some(out)
 }
 
 /// Lowercase hex encode.
 fn hex_encode(bytes: &[u8]) -> String {
-  let mut out = String::with_capacity(bytes.len() * 2);
-  for b in bytes {
-    out.push(char::from_digit(u32::from(b >> 4), 16).expect("nibble < 16"));
-    out.push(char::from_digit(u32::from(b & 0xf), 16).expect("nibble < 16"));
-  }
-  out
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(char::from_digit(u32::from(b >> 4), 16).expect("nibble < 16"));
+        out.push(char::from_digit(u32::from(b & 0xf), 16).expect("nibble < 16"));
+    }
+    out
 }
 
 /// Strict hex decode: even length, hex digits only (either case).
 fn hex_decode(s: &str) -> Option<Vec<u8>> {
-  fn val(c: u8) -> Option<u8> {
-    match c {
-      b'0'..=b'9' => Some(c - b'0'),
-      b'a'..=b'f' => Some(c - b'a' + 10),
-      b'A'..=b'F' => Some(c - b'A' + 10),
-      _ => None,
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            b'A'..=b'F' => Some(c - b'A' + 10),
+            _ => None,
+        }
     }
-  }
-  let bytes = s.as_bytes();
-  if !bytes.len().is_multiple_of(2) {
-    return None;
-  }
-  bytes
-    .as_chunks::<2>()
-    .0
-    .iter()
-    .map(|pair| Some(val(pair[0])? << 4 | val(pair[1])?))
-    .collect()
+    let bytes = s.as_bytes();
+    if !bytes.len().is_multiple_of(2) {
+        return None;
+    }
+    bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| Some(val(pair[0])? << 4 | val(pair[1])?))
+        .collect()
 }
 
 #[cfg(test)]

@@ -11,17 +11,17 @@
 //! ```
 
 fn main() -> Result<(), envrypt::LoadError> {
-  let loaded = envrypt::load()?;
+    let loaded = envrypt::load()?;
 
-  println!("resolved {} key(s):", loaded.len());
-  for (key, value) in loaded.iter() {
-    // Never print real secrets in a real app — this is illustrative.
-    println!("  {key} = {value}");
-  }
+    println!("resolved {} key(s):", loaded.len());
+    for (key, value) in loaded.iter() {
+        // Never print real secrets in a real app — this is illustrative.
+        println!("  {key} = {value}");
+    }
 
-  if let Some(token) = loaded.get("STRIPE_SECRET") {
-    eprintln!("STRIPE_SECRET resolved ({} bytes)", token.len());
-  }
+    if let Some(token) = loaded.get("STRIPE_SECRET") {
+        eprintln!("STRIPE_SECRET resolved ({} bytes)", token.len());
+    }
 
-  Ok(())
+    Ok(())
 }

@@ -18,7 +18,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use envrypt::crypto::{
-  decrypt_with_key, encrypt, encrypt_with_key, parse_private_key, parse_public_key,
+    decrypt_with_key, encrypt, encrypt_with_key, parse_private_key, parse_public_key,
 };
 
 /// Fixed test keypair — `tests/lib/helpers/decryptKeyValue.test.js:6-7`, a
@@ -30,52 +30,54 @@ const VALUE_COUNT: usize = 100;
 
 /// 100 fixed plaintext values (deterministic, no randomness in the corpus).
 fn plaintext_values() -> Vec<String> {
-  (0..VALUE_COUNT)
-    .map(|i| format!("secret-value-number-{i:03}-payload-abcdefghijklmnop"))
-    .collect()
+    (0..VALUE_COUNT)
+        .map(|i| format!("secret-value-number-{i:03}-payload-abcdefghijklmnop"))
+        .collect()
 }
 
 fn bench_crypto(c: &mut Criterion) {
-  let mut group = c.benchmark_group("crypto");
+    let mut group = c.benchmark_group("crypto");
 
-  let plaintexts = plaintext_values();
+    let plaintexts = plaintext_values();
 
-  // encrypt_bulk_100 — write side: parse the recipient public key ONCE (outside
-  // the measured loop, like the encrypt action does per file), then measure ONLY
-  // `encrypt_with_key` per value. This isolates the per-value cost from the
-  // one-time recipient parse.
-  let recipient = parse_public_key(PUBLIC_KEY).expect("fixed test public key parses");
-  group.throughput(Throughput::Elements(VALUE_COUNT as u64));
-  group.bench_function("encrypt_bulk_100", |b| {
-    b.iter(|| {
-      for value in &plaintexts {
-        black_box(encrypt_with_key(
-          black_box(&recipient),
-          black_box(value),
-          true,
-        ));
-      }
+    // encrypt_bulk_100 — write side: parse the recipient public key ONCE (outside
+    // the measured loop, like the encrypt action does per file), then measure ONLY
+    // `encrypt_with_key` per value. This isolates the per-value cost from the
+    // one-time recipient parse.
+    let recipient = parse_public_key(PUBLIC_KEY).expect("fixed test public key parses");
+    group.throughput(Throughput::Elements(VALUE_COUNT as u64));
+    group.bench_function("encrypt_bulk_100", |b| {
+        b.iter(|| {
+            for value in &plaintexts {
+                black_box(encrypt_with_key(
+                    black_box(&recipient),
+                    black_box(value),
+                    true,
+                ));
+            }
+        });
     });
-  });
 
-  // decrypt_bulk_100 — ECIES per-value floor + hoist. Setup encrypts the fixed
-  // plaintexts once (outside the measured loop) and parses the private key once
-  // (`SecretKey`), then the loop measures ONLY `decrypt_with_key` per value.
-  let ciphertexts: Vec<String> = plaintexts
-    .iter()
-    .map(|value| encrypt(PUBLIC_KEY, value, true).unwrap())
-    .collect();
-  let secret = parse_private_key(PRIVATE_KEY).expect("fixed test private key parses");
-  group.throughput(Throughput::Elements(VALUE_COUNT as u64));
-  group.bench_function("decrypt_bulk_100", |b| {
-    b.iter(|| {
-      for ciphertext in &ciphertexts {
-        black_box(decrypt_with_key(black_box(&secret), black_box(ciphertext), true).unwrap());
-      }
+    // decrypt_bulk_100 — ECIES per-value floor + hoist. Setup encrypts the fixed
+    // plaintexts once (outside the measured loop) and parses the private key once
+    // (`SecretKey`), then the loop measures ONLY `decrypt_with_key` per value.
+    let ciphertexts: Vec<String> = plaintexts
+        .iter()
+        .map(|value| encrypt(PUBLIC_KEY, value, true).unwrap())
+        .collect();
+    let secret = parse_private_key(PRIVATE_KEY).expect("fixed test private key parses");
+    group.throughput(Throughput::Elements(VALUE_COUNT as u64));
+    group.bench_function("decrypt_bulk_100", |b| {
+        b.iter(|| {
+            for ciphertext in &ciphertexts {
+                black_box(
+                    decrypt_with_key(black_box(&secret), black_box(ciphertext), true).unwrap(),
+                );
+            }
+        });
     });
-  });
 
-  group.finish();
+    group.finish();
 }
 
 criterion_group!(benches, bench_crypto);

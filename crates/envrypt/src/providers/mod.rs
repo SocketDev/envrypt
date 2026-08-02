@@ -30,7 +30,8 @@ use crate::keyring::Ring;
 /// forwards human-readable progress strings. A provider is only ever invoked by
 /// [`crate::keyring::fill_ring`] while the ring still has a blank.
 pub trait KeyProvider {
-  fn lookup(&self, ring: &mut Ring, on_status: &mut dyn FnMut(&str)) -> Result<(), ProviderError>;
+    fn lookup(&self, ring: &mut Ring, on_status: &mut dyn FnMut(&str))
+        -> Result<(), ProviderError>;
 }
 
 /// A provider failure. Providers normally swallow their own errors and yield
@@ -40,9 +41,9 @@ pub trait KeyProvider {
 pub struct ProviderError(pub String);
 
 impl std::fmt::Display for ProviderError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&self.0)
-  }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 impl std::error::Error for ProviderError {}
@@ -53,27 +54,26 @@ impl std::error::Error for ProviderError {}
 /// position.
 pub(crate) fn merge_truthy<I, K, V>(ring: &mut Ring, entries: I)
 where
-  I: IntoIterator<Item = (K, V)>,
-  K: Into<String>,
-  V: Into<String>,
+    I: IntoIterator<Item = (K, V)>,
+    K: Into<String>,
+    V: Into<String>,
 {
-  for (public_hex, private_hex) in entries {
-    let private_hex = private_hex.into();
-    if !private_hex.is_empty() {
-      ring.insert(public_hex.into(), private_hex);
+    for (public_hex, private_hex) in entries {
+        let private_hex = private_hex.into();
+        if !private_hex.is_empty() {
+            ring.insert(public_hex.into(), private_hex);
+        }
     }
-  }
 }
 
 /// The public keys of the ring's still-blank (`""`) entries, in ring insertion
 /// order. A provider iterates these, re-checking after each consult that the
 /// entry is still blank (an earlier consult in the same pass may have filled it).
 pub(crate) fn blank_public_keys(ring: &Ring) -> Vec<String> {
-  ring
-    .iter()
-    .filter(|(_, v)| v.is_empty())
-    .map(|(k, _)| k.clone())
-    .collect()
+    ring.iter()
+        .filter(|(_, v)| v.is_empty())
+        .map(|(k, _)| k.clone())
+        .collect()
 }
 
 pub mod keychain;
@@ -81,6 +81,6 @@ pub mod keychain;
 mod gating;
 
 pub use gating::{
-  backend_available, build_providers, ci_vendor_detected, ci_vendor_detected_from_env,
-  use_keychain, ProviderGating, CI_VENDOR_VARS,
+    backend_available, build_providers, ci_vendor_detected, ci_vendor_detected_from_env,
+    use_keychain, ProviderGating, CI_VENDOR_VARS,
 };

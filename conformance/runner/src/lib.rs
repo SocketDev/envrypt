@@ -26,5 +26,5 @@ pub use case::{load_spec_cases, spec_cases_path, Encoding, SpecCase};
 pub use fixture::write_env_fixture;
 pub use normalize::Mask;
 pub use run::{
-  run_spec_case, run_spec_suite, BaseEnv, BaseEnvFn, CaseFailure, MapSource, ParsesTo,
+    run_spec_case, run_spec_suite, BaseEnv, BaseEnvFn, CaseFailure, MapSource, ParsesTo,
 };
