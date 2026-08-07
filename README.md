@@ -2,7 +2,7 @@
 
 envrypt is a Rust library for encrypted `.env` files: it reads a `.env`, resolves
 the private key from the process environment or `.env.keys`, decrypts
-`encrypted:` values, and returns a map — or injects into `std::env` on request.
+`encrypted:` values, and returns a map - or injects into `std::env` on request.
 
 The private key stays out of your repo, your shell history, and your terminal
 transcripts: the embedding app calls the library, and the key lives in an env var
@@ -32,14 +32,14 @@ encrypted files keep decrypting.
 
 ## Repo layout
 
-- `crates/envrypt` — the library crate (see its [README](crates/envrypt/README.md)
+- `crates/envrypt` - the library crate (see its [README](crates/envrypt/README.md)
   and `examples/`).
-- `crates/test-support` — dev-only test harness.
-- `conformance/` — parser corpora, golden crypto vectors, and the frozen legacy
+- `crates/test-support` - dev-only test harness.
+- `conformance/` - parser corpora, golden crypto vectors, and the frozen legacy
   interop corpus, driven by the `envrypt-conformance` runner.
-- `docs/envrypt/` — `crypto-v3.md` (write format), `crypto-formats.md` (legacy
+- `docs/envrypt/` - `crypto-v3.md` (write format), `crypto-formats.md` (legacy
   read formats), `test-partition.md` (test map), `fuzzing.md`.
-- `fuzz/` — libFuzzer targets and corpora (`docs/envrypt/fuzzing.md`).
+- `fuzz/` - libFuzzer targets and corpora (`docs/envrypt/fuzzing.md`).
 
 ## Compatibility
 
@@ -55,4 +55,4 @@ encrypted files keep decrypting.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT - see [`LICENSE`](LICENSE).

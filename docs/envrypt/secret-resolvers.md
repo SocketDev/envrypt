@@ -3,16 +3,16 @@
 envrypt can replace a `<scheme>://…` env value with the secret read from an
 external manager's CLI at load time. Every resolver is:
 
-- **opt-in** — off by default; a stored reference loads verbatim unless the
+- **opt-in** - off by default; a stored reference loads verbatim unless the
   caller enables that scheme (least-privilege: enable only the managers you use).
-- **fail-closed** — a reference you asked to resolve but couldn't (CLI absent,
+- **fail-closed** - a reference you asked to resolve but couldn't (CLI absent,
   not authenticated, bad reference, timeout, empty output) is an ERROR, never a
   silent pass-through.
-- **CLI-only** — envrypt shells the vendor CLI through the bounded subprocess
-  `Exec` seam (no async, no cloud SDK — the crate's dep budget forbids
+- **CLI-only** - envrypt shells the vendor CLI through the bounded subprocess
+  `Exec` seam (no async, no cloud SDK - the crate's dep budget forbids
   `reqwest`/`hyper`/AWS-SDK), injection-safe (argv, never a shell string), and
   static-musl-friendly.
-- **mocked in tests** — every resolver's tests inject a canned `Exec`, so the
+- **mocked in tests** - every resolver's tests inject a canned `Exec`, so the
   suite never spawns a real CLI or touches the network.
 
 ## Supported schemes
@@ -30,23 +30,23 @@ external manager's CLI at load time. Every resolver is:
 | `pass://`      | `pass` (Unix password store) | `pass://<path>`                                                    | `pass show <path>`                                                                        | `resolve_pass_references`      | [passwordstore.org](https://www.passwordstore.org/)                                                            |
 
 Docs URLs verified against the vendors' current documentation (July 2026); they
-are the canonical CLI command pages, not version-pinned — a CLI's flags can shift
+are the canonical CLI command pages, not version-pinned - a CLI's flags can shift
 across major versions.
 
 ## Authentication is the caller's responsibility
 
-envrypt never authenticates a manager — it only invokes an already-authenticated
+envrypt never authenticates a manager - it only invokes an already-authenticated
 CLI and inherits its session from the process environment:
 
-- **Vault** — `VAULT_ADDR` + `VAULT_TOKEN` (or a logged-in `~/.vault-token`).
-- **AWS** — the standard credential chain (`AWS_PROFILE`, env keys, SSO).
-- **Doppler** — `doppler login` / a `DOPPLER_TOKEN` service token.
-- **GCP** — `gcloud auth` application-default credentials.
-- **Azure** — `az login`.
-- **Infisical** — `infisical login` / an `INFISICAL_TOKEN`.
-- **Bitwarden** — an unlocked `BW_SESSION`.
-- **1Password** — a signed-in `op` (optionally biometric).
-- **`pass`** — a `gpg-agent` able to decrypt the store.
+- **Vault** - `VAULT_ADDR` + `VAULT_TOKEN` (or a logged-in `~/.vault-token`).
+- **AWS** - the standard credential chain (`AWS_PROFILE`, env keys, SSO).
+- **Doppler** - `doppler login` / a `DOPPLER_TOKEN` service token.
+- **GCP** - `gcloud auth` application-default credentials.
+- **Azure** - `az login`.
+- **Infisical** - `infisical login` / an `INFISICAL_TOKEN`.
+- **Bitwarden** - an unlocked `BW_SESSION`.
+- **1Password** - a signed-in `op` (optionally biometric).
+- **`pass`** - a `gpg-agent` able to decrypt the store.
 
 A locked/unauthenticated CLI exits non-zero, which envrypt surfaces as a
 fail-closed resolution error (never a silent miss).

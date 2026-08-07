@@ -1,11 +1,11 @@
-# envrypt v3 — native encrypted-value format
+# envrypt v3 - native encrypted-value format
 
 This is the format envrypt **writes** when it encrypts a value. Older values
 (the v1 layouts) stay **readable** so existing files keep working, but every new
 value envrypt produces uses v3.
 
 v3 exists to fix four concrete weaknesses in the older design. Read the "Why"
-notes — each one maps to a real attack the format now blocks.
+notes - each one maps to a real attack the format now blocks.
 
 ## The building blocks (and why each was chosen)
 
@@ -14,10 +14,10 @@ notes — each one maps to a real attack the format now blocks.
 | Recipient encryption | **X25519** ECDH + HKDF-SHA256 | No point-validation footguns (unlike a signing curve used for encryption), 32-byte keys, fast.                       |
 | Symmetric cipher     | **XChaCha20-Poly1305**        | 24-byte random nonce, so a fresh random nonce per value has no realistic reuse risk. Constant-time in pure software. |
 | Passphrase → key     | **Argon2id**                  | Memory-hard; the current top recommendation for password-based keys. Far harder to crack on GPUs/ASICs than scrypt.  |
-| Key check            | **Key commitment tag**        | Makes the cipher _committing_ — a blob can only ever open under one key.                                             |
+| Key check            | **Key commitment tag**        | Makes the cipher _committing_ - a blob can only ever open under one key.                                             |
 
 All four are pure-Rust crates (`x25519-dalek`, `chacha20poly1305`,
-`argon2`) — no OpenSSL, no C.
+`argon2`) - no OpenSSL, no C.
 
 ## Two modes
 
@@ -29,7 +29,7 @@ share the same header, AAD, and commitment rules; they differ only in how the
 ## The header (also the AAD)
 
 Every v3 payload starts with a small header. Those exact header bytes are **also
-passed to the cipher as AAD** (Additional Authenticated Data — data that is
+passed to the cipher as AAD** (Additional Authenticated Data - data that is
 authenticated but not encrypted), together with the **variable name**. If anyone
 changes a header byte _or moves the value to a different variable_, decryption
 fails.
@@ -50,7 +50,7 @@ offset  field          type      notes
 **AAD fed to the cipher =** `header_bytes || 0x00 || variable_name_utf8`.
 The `0x00` separator keeps a name like `AB` + header from colliding with `A` +
 different bytes. The variable name is authenticated but never stored in the
-payload — the caller already knows it (it's the `.env` key).
+payload - the caller already knows it (it's the `.env` key).
 
 > **Why (relocation attack).** In the old format the private key decrypts _any_
 > ciphertext no matter which variable it sits under, so an attacker with write
@@ -58,7 +58,7 @@ payload — the caller already knows it (it's the `.env` key).
 > decrypt clean. Binding the variable name into the AAD means a value only opens
 > under the name it was sealed for.
 
-## Recipient mode (mode = 0x01) — the `encrypted:` value
+## Recipient mode (mode = 0x01) - the `encrypted:` value
 
 ```
 encrypted:<base64url(payload)>
@@ -82,7 +82,7 @@ Key schedule:
 Detection: a v3 payload's first byte is `0x03`; a legacy v1 `encrypted:` payload
 starts with `0x04`, a SEC1 point prefix, so the two never collide.
 
-## Passphrase mode (mode = 0x02) — the `locked:` value
+## Passphrase mode (mode = 0x02) - the `locked:` value
 
 ```
 locked:<public_key_hex>:<base64url(payload)>
@@ -110,7 +110,7 @@ header cannot force a resource-exhaustion (memory-blowup) denial of service.
 
 XChaCha20-Poly1305, like AES-GCM, is **not committing**: without extra work a
 single blob can be crafted to open validly under more than one key. For a
-passphrase format that enables a _partitioning oracle_ — each decrypt attempt
+passphrase format that enables a _partitioning oracle_ - each decrypt attempt
 tests many candidate passphrases at once, speeding up cracking.
 
 Fix: derive a 32-byte commitment from the key and store it in the payload:
@@ -135,8 +135,8 @@ fails here, and a blob can only ever commit to one key.
 4. Rebuild the AAD (`header || 0x00 || var_name`); XChaCha20-Poly1305 decrypt.
 5. UTF-8 the plaintext.
 
-Any failure returns the same opaque error — never a distinct "wrong passphrase"
-vs "wrong name" signal — so the format is not itself an oracle.
+Any failure returns the same opaque error - never a distinct "wrong passphrase"
+vs "wrong name" signal - so the format is not itself an oracle.
 
 ## Compatibility
 
@@ -144,9 +144,9 @@ vs "wrong name" signal — so the format is not itself an oracle.
   interop tests prove it), so existing files keep decrypting.
 - The **curated public API and default encrypt path write only v3.** A v1
   writer stays as a low-level primitive (`envrypt::crypto::encrypt_with_key`)
-  that only the in-repo vector generator and benchmarks call — never the app
+  that only the in-repo vector generator and benchmarks call - never the app
   path.
-- Recipient v3 uses X25519 keys — a new keypair, generated by envrypt.
+- Recipient v3 uses X25519 keys - a new keypair, generated by envrypt.
 
 ## Test obligations
 

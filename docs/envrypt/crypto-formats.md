@@ -1,4 +1,4 @@
-# Legacy v1 crypto formats — read spec
+# Legacy v1 crypto formats - read spec
 
 envrypt reads two legacy encrypted-value layouts: the `encrypted:` v1 ECIES value
 and the `locked:` v1 passphrase value. Both layouts are byte-frozen read formats:
@@ -19,11 +19,11 @@ strings).
 
 ---
 
-## 1. `encrypted:` v1 — ECIES value (`crates/envrypt/src/crypto.rs`)
+## 1. `encrypted:` v1 - ECIES value (`crates/envrypt/src/crypto.rs`)
 
 The value form of an encrypted `.env` entry. ECIES (public-key encryption that
 derives a fresh shared key per value) over secp256k1, HKDF-SHA256, AES-256-GCM
-with a 16-byte nonce — a number used once per encryption.
+with a 16-byte nonce - a number used once per encryption.
 
 ### 1.1 String form
 
@@ -98,7 +98,7 @@ in `code` and help URL. Each error carries `code`, `message`,
 
 ---
 
-## 2. `locked:` v1 — passphrase-locked private key (`crates/envrypt/src/services/lock.rs`)
+## 2. `locked:` v1 - passphrase-locked private key (`crates/envrypt/src/services/lock.rs`)
 
 A private key encrypted at rest under a local passphrase. scrypt + AES-256-GCM
 with a 12-byte IV. envrypt keeps the **unlock (read)** side of this layout.
@@ -111,7 +111,7 @@ locked:<public_key_hex>:<base64url(payload)>
 
 - `<public_key_hex>` is the compressed public-key hex the private key pairs
   with, echoed verbatim and unauthenticated in v1 (v3 binds its header into the
-  AAD instead — see `crypto-v3.md`).
+  AAD instead - see `crypto-v3.md`).
 - `base64url` uses alphabet `A-Za-z0-9-_` with **no padding**.
 - Parsing splits with `splitn(3, ':')`, so the payload segment is everything
   after the second `:`.

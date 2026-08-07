@@ -4,7 +4,7 @@ How the `fuzz/` workspace works, the rules CI enforces around it, and the
 standing performance priors for the library. CI: `.github/workflows/rust-fuzz.yml`
 (build gate on every push, nightly coverage-guided runs).
 
-## The `unsafe` rule — every `unsafe` needs a `// FUZZ:` annotation
+## The `unsafe` rule - every `unsafe` needs a `// FUZZ:` annotation
 
 The release profile sets `panic = "abort"`, so unguarded undefined behavior is a
 hard crash for consumers. Rule: any `unsafe` token in `crates/envrypt/src/**`
@@ -18,10 +18,10 @@ the 3 lines above it, naming the fuzz target that exercises the path.
   rule does not apply. The lint scopes the exemption precisely to `#[cfg(test)]`
   regions (module or fn, tracked by brace depth); every other line stays gated.
   Example: `sockeye`'s child-process test harness uses raw `libc::{pipe, fork,
-dup2, waitpid, …}` calls under `#[cfg(test)]` — those are exempt, while the
+dup2, waitpid, …}` calls under `#[cfg(test)]` - those are exempt, while the
   production `from_raw_fd` below is annotated.
 - The one shipped `unsafe` is `sockeye::read_pipe`'s
-  `File::from_raw_fd(3)` — taking ownership of the inherited Sockeye descriptor.
+  `File::from_raw_fd(3)` - taking ownership of the inherited Sockeye descriptor.
   It is annotated `// FUZZ: sockeye_decode`: the `sockeye_decode` target fuzzes
   the record parser that descriptor feeds (`sockeye::decode` over raw bytes),
   which is the whole surface an untrusted parent controls.
@@ -34,36 +34,36 @@ dup2, waitpid, …}` calls under `#[cfg(test)]` — those are exempt, while the
 `fuzz/` is a standalone cargo workspace (its own empty `[workspace]` table; the
 parent workspace lists `exclude = ["fuzz"]`), so a repo-root `cargo build`/`test`
 never sweeps it in and it never inherits the ship `[profile.release]`. Its
-profile inverts the ship profile — `debug-assertions = true`,
-`overflow-checks = true`, `debug = 1` — so assertion violations and silent wraps
+profile inverts the ship profile - `debug-assertions = true`,
+`overflow-checks = true`, `debug = 1` - so assertion violations and silent wraps
 become crash findings. Targets link `envrypt` with default features only, the
 same minimal graph the shipped parse path uses.
 
 Files:
 
 - `fuzz/fuzz_targets/{parse_pipeline,ecies_decrypt,upsert_roundtrip,sockeye_decode}.rs`
-  — the targets.
-- `fuzz/fuzz.dict` — libFuzzer dictionary: `.env` grammar tokens, the
+  - the targets.
+- `fuzz/fuzz.dict` - libFuzzer dictionary: `.env` grammar tokens, the
   `encrypted:` prefix, key-naming conventions, the UTF-16LE/UTF-8 BOMs, and the
   internal upsert placeholder sentinel (`crates/envrypt/src/edit.rs`).
-- `fuzz/corpus/<target>/` — the committed seed corpus.
-- `fuzz/seed-corpus.py` — regenerates the seed corpus from the 88 spec inputs
+- `fuzz/corpus/<target>/` - the committed seed corpus.
+- `fuzz/seed-corpus.py` - regenerates the seed corpus from the 88 spec inputs
   (`conformance/cases/spec/spec.json`), the fixture trees
   (`conformance/fixtures/**`), and crafted per-target edge seeds. Seed files use
   neutral names (never `.env*`) so the repo `.gitignore` keeps them. Default
   mode RESETS each corpus dir to exactly the seed set (the committed corpus is
-  deterministic); `--additive` layers the seeds on top of an existing corpus —
+  deterministic); `--additive` layers the seeds on top of an existing corpus -
   the nightly CI job uses `--additive` after restoring its cached,
   coverage-guided corpus so growth accumulates across nights (a reset would wipe
   the restored growth before every run).
-- `fuzz/run.sh` — the single source of truth for per-target libFuzzer flags,
+- `fuzz/run.sh` - the single source of truth for per-target libFuzzer flags,
   used by both local runs and the nightly CI job.
-- `fuzz/no-unsafe-without-fuzz.sh` — the lint above.
+- `fuzz/no-unsafe-without-fuzz.sh` - the lint above.
 
 **Keep `fuzz/Cargo.lock` fresh.** The lock pins the full `envrypt` dependency
 graph, so any change that adds or bumps an `envrypt` dependency must refresh it
-in the same change: run a resolve against the fuzz manifest —
-`cargo tree --manifest-path fuzz/Cargo.toml` (or `cargo +nightly fuzz build`) —
+in the same change: run a resolve against the fuzz manifest -
+`cargo tree --manifest-path fuzz/Cargo.toml` (or `cargo +nightly fuzz build`) -
 then commit the updated `fuzz/Cargo.lock`. The `rust-fuzz.yml` build job runs
 `cargo metadata --manifest-path fuzz/Cargo.toml --locked` and FAILS on a stale
 lock (otherwise a `cargo fuzz build` silently rewrites the lock at build time,
@@ -90,18 +90,18 @@ cargo-fuzz sets `--cfg fuzzing` build-wide. Two `envrypt` constants take smaller
 values ONLY under that cfg (declared in `crates/envrypt/Cargo.toml`'s
 `check-cfg`). No default, normal, or `--all-features` build ever sets it, so
 shipped behavior and `cargo test` behavior are byte-for-byte the production
-code, and both guards exist in production — the fuzz build only shrinks them.
+code, and both guards exist in production - the fuzz build only shrinks them.
 
 1. **`MAX_EXPAND_ITERATIONS` (10 000 → 256).** A self-reinserting expansion's
-   ADDITIVE member — a value that re-inserts the match verbatim — grows the
+   ADDITIVE member - a value that re-inserts the match verbatim - grows the
    result about linearly per pass and does O(cap²) work: at the production cap
    a single exec runs for tens of seconds even on a ≤128-byte input (measured
    35 s uninstrumented; minutes under ASan), tripping every finite `-timeout`.
    The lowered cap fuzzes the identical scan → look-up → replace path on grown
    strings, fast.
 2. **`DEFAULT_MAX_EXPAND_OUTPUT_BYTES` (1 MiB → 16 KiB).** The MULTIPLICATIVE
-   member — an after-match/whole-match reinsertion that duplicates a
-   still-`${…}`-bearing tail — doubles the result every pass and blows past any
+   member - an after-match/whole-match reinsertion that duplicates a
+   still-`${…}`-bearing tail - doubles the result every pass and blows past any
    iteration cap; a past run recorded a 2.4 GB single allocation. The byte
    budget is what stops it, in production and under fuzzing alike: `expand`
    returns an error, `parse_with_ring` records `EXPANSION_TOO_LARGE` on that
@@ -125,31 +125,31 @@ lenient base64 decoder can produce).
 
 Calibrated for the ASan + coverage instrumentation of a cargo-fuzz build:
 
-- `-timeout=10` — absorbs the ~10x ASan slowdown; a genuine hang is unbounded
+- `-timeout=10` - absorbs the ~10x ASan slowdown; a genuine hang is unbounded
   and still caught. (The slow expansion class is handled by the `cfg(fuzzing)`
   cap above, never by a timeout hack.)
-- `-rss_limit_mb=2048` — ASan shadow memory plus libFuzzer's accumulating
+- `-rss_limit_mb=2048` - ASan shadow memory plus libFuzzer's accumulating
   coverage counters/corpus push the baseline RSS of the scan-heavy targets past
   512 MB over a run (measured ~410–530 MB) with no per-exec allocation blowup.
   A real unbounded allocation still trips 2048.
-- `-max_len=4096` — bounds a single `.env`-sized input.
+- `-max_len=4096` - bounds a single `.env`-sized input.
 
 ## What is (and is not) a finding
 
 A **panic / abort / overflow / OOM / hang** is a finding; a graceful `Err`/`None`
 return is not. Property assertions per target:
 
-- `parse_pipeline` — never panics through encoding-detect → scan → expand.
-- `ecies_decrypt` — never panics; every decrypt failure maps to exactly one of
+- `parse_pipeline` - never panics through encoding-detect → scan → expand.
+- `ecies_decrypt` - never panics; every decrypt failure maps to exactly one of
   the conditions in `docs/envrypt/crypto-formats.md` §1.4;
   `decrypt(encrypt(pt)) == pt`.
-- `upsert_roundtrip` — never panics (primary); `upsert` is deterministic;
+- `upsert_roundtrip` - never panics (primary); `upsert` is deterministic;
   scan-back and scan-back-idempotence are asserted **only on a clean
   `IDENT=value` src**. Over arbitrary or malformed src those two properties do
   not hold (a long tail of scan/placeholder interactions defeats them by
   design); the known cases are pinned as unit tests (e.g.
   `edit::tests::upsert_placeholder_collision_*`).
-- `sockeye_decode` — never panics on any bytes fed to `sockeye::decode` (the
+- `sockeye_decode` - never panics on any bytes fed to `sockeye::decode` (the
   `envrypt-v1` inherited-pipe record parser); every malformed record fails
   closed with a graceful `Err` (bad header / lengths / name / non-hex key /
   short read / trailing byte), and a well-formed record round-trips to its
@@ -163,7 +163,7 @@ When a run finds a real bug:
 
 1. Reproduce: `cargo +nightly fuzz run <target> fuzz/artifacts/<target>/<artifact>`.
 2. Minimize: `cargo +nightly fuzz tmin <target> fuzz/artifacts/<target>/<artifact>`.
-3. **Commit the minimized input as a unit-test regression FIRST** — a small
+3. **Commit the minimized input as a unit-test regression FIRST** - a small
    `#[test]` in the owning `envrypt` module (crafted to run fast; never commit a
    multi-second artifact). Observe it fail, then fix, then observe it pass. The
    regression test carries a `// FUZZ:` provenance comment naming the target.
@@ -177,25 +177,25 @@ perf claim without a benchmark or disassembly is a guess.
 
 Do NOT, per prior measurement:
 
-1. **Hand-rolled SIMD** for scanning quotes/whitespace/identifiers — lost 1.5–8%
+1. **Hand-rolled SIMD** for scanning quotes/whitespace/identifiers - lost 1.5–8%
    vs `memchr` in four separate experiments; `.env` tokens are short.
-2. **Arena/bump allocation for parse output** — wrong scale (a `.env` yields tens
+2. **Arena/bump allocation for parse output** - wrong scale (a `.env` yields tens
    of entries; `Vec<Entry>` + `String`/`Cow` is correct here), plus bumpalo's
    never-runs-`Drop` leak class.
-3. **String interning / global caches** — pure overhead at this scale, and a
+3. **String interning / global caches** - pure overhead at this scale, and a
    measured parallel regression elsewhere.
-4. **rayon/parallelism on per-value crypto** — ordering is part of the parse
+4. **rayon/parallelism on per-value crypto** - ordering is part of the parse
    contract; typical value counts never amortize thread spawn.
-5. **Swapping the allocator by default** — the only sanctioned trigger is a
+5. **Swapping the allocator by default** - the only sanctioned trigger is a
    measured musl regression vs glibc.
 6. **Speculative micro-restructuring** (bit-packing, LUT-vs-match rewrites)
-   without a disassembly or A/B — LLVM already lowers contiguous `matches!` arms
+   without a disassembly or A/B - LLVM already lowers contiguous `matches!` arms
    to range checks.
 
 Adopted, with the receipts in git history:
 
 - `[profile.release]` = opt-level 3 / **fat** LTO / codegen-units 1 /
-  panic=abort / strip=symbols — the smallest, fastest object code for an
+  panic=abort / strip=symbols - the smallest, fastest object code for an
   embedding application that builds this crate once and ships the result.
 - `[profile.bench]` inherits release with `debug = true`, `strip = "none"` for
   symbolized criterion profiles (`crates/envrypt/benches/`).

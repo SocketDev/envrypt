@@ -138,7 +138,7 @@
 - **Be careful with `rm`.** Never `rm -rf` with variables, globs, or a cwd you haven't
   just verified. Prefer tempfile-scoped cleanup, `git rm` for tracked files, and
   `git clean` only with explicit paths. Name the exact path when deletion is required.
-- **The same rule applies to scripts you write** — including `.mts`/`.ts`/`.js` (node,
+- **The same rule applies to scripts you write** - including `.mts`/`.ts`/`.js` (node,
   tsx) and python helpers: no recursive deletes or overwrites driven by variables or
   globs; scope all file mutation to a tempdir the script itself created, or to an
   exact, named path. Scripts that probe the JS oracle must treat the repo as
@@ -150,11 +150,11 @@
 This repo is the **`envrypt` Rust library** (single crate `crates/envrypt`, no CLI),
 MIT-licensed. The crypto/file wire formats are kept frozen for interoperability.
 
-- Normative crypto specs: `docs/envrypt/crypto-v3.md` — the format envrypt writes — and
-  `docs/envrypt/crypto-formats.md` — the legacy v1 layouts it still reads. Test map:
+- Normative crypto specs: `docs/envrypt/crypto-v3.md` - the format envrypt writes - and
+  `docs/envrypt/crypto-formats.md` - the legacy v1 layouts it still reads. Test map:
   `docs/envrypt/test-partition.md`. Fuzzing: `docs/envrypt/fuzzing.md`.
 - **Frozen (never break):** the `encrypted:` + `locked:` v1 byte layouts and the
-  interop tripwire (`crates/envrypt/tests/interop_corpus.rs`) — existing encrypted values
+  interop tripwire (`crates/envrypt/tests/interop_corpus.rs`) - existing encrypted values
   in the supported format must keep decrypting. Keep the MIT `LICENSE`.
 - **Key naming:** `ENVRYPT_`-only; the prefix and explicit var names are configurable.
 - **Dep budget:** no `openssl-sys`/`tokio`/`reqwest`/`hyper`/async/dbus on any path;

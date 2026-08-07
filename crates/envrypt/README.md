@@ -2,7 +2,7 @@
 
 envrypt is a Rust library that encrypts and decrypts `.env` values. It reads a
 `.env`, resolves the private key from the process environment or `.env.keys`,
-decrypts `encrypted:` values, and returns a map — or injects into `std::env` on
+decrypts `encrypted:` values, and returns a map - or injects into `std::env` on
 request.
 
 The private key stays out of your repo, your shell history, and your terminal
@@ -20,9 +20,9 @@ let token = loaded.get("STRIPE_SECRET");
 
 ## API
 
-- `envrypt::load()` — zero-config: reads `.env`, default key resolution, returns
+- `envrypt::load()` - zero-config: reads `.env`, default key resolution, returns
   a `Loaded` map.
-- `envrypt::config(&LoadOptions)` — full control: file paths, conventions
+- `envrypt::config(&LoadOptions)` - full control: file paths, conventions
   (`nextjs`, `flow`), `overload`, `strict`, `inject`, key naming, keychain
   timeout, a diagnostics callback, and a `KeyPolicy` (env-only default,
   opt-in system keychain, or custom `KeyResolver`s).
@@ -89,4 +89,4 @@ secret as a command argument.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT - see `LICENSE`.
