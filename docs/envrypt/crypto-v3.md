@@ -34,6 +34,9 @@ authenticated but not encrypted), together with the **variable name**. If anyone
 changes a header byte _or moves the value to a different variable_, decryption
 fails.
 
+<details>
+<summary><b>The header layout and AAD construction</b> - byte offsets, the 0x00 name separator, and the relocation attack this closes</summary>
+
 ```
 offset  field          type      notes
 ------  -------------  --------  ------------------------------------------
@@ -57,6 +60,8 @@ payload - the caller already knows it (it's the `.env` key).
 > access could move `encrypted:(DEBUG=false)` onto `ADMIN_ENABLED` and it would
 > decrypt clean. Binding the variable name into the AAD means a value only opens
 > under the name it was sealed for.
+
+</details>
 
 ## Recipient mode (mode = 0x01) - the `encrypted:` value
 

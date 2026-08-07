@@ -29,6 +29,9 @@ let token = loaded.get("STRIPE_SECRET");
 
 Behavior contracts, pinned by `tests/public_api.rs` and the keychain tests:
 
+<details>
+<summary><b>The eight behavior contracts</b> - strict decrypt, no injection by default, bounded key resolution, library purity, and expansion caps</summary>
+
 - **Strict by default.** An unresolved or undecryptable value returns
   `Err(LoadError)`. With `strict = false`, the ciphertext stays in the map and
   the failure is reported via `Loaded::errors()`.
@@ -58,6 +61,8 @@ Behavior contracts, pinned by `tests/public_api.rs` and the keychain tests:
   `LoadOptions::max_expand_output_bytes` (default 1 MiB) per value. A
   self-referential value that grows on every pass returns `EXPANSION_TOO_LARGE`
   naming the key; the value is reported, never truncated.
+
+</details>
 
 ## Encryption format
 

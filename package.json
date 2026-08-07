@@ -1,5 +1,5 @@
 {
-  "name": "envrypt-workspace",
+  "name": "envrypt",
   "private": true,
   "scripts": {
     "build": "cargo build --workspace --locked",

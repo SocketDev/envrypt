@@ -41,6 +41,9 @@ same minimal graph the shipped parse path uses.
 
 Files:
 
+<details>
+<summary><b>The workspace files</b> - the four targets, the dictionary, the seed corpus generator, the runner, and the lock-freshness rule</summary>
+
 - `fuzz/fuzz_targets/{parse_pipeline,ecies_decrypt,upsert_roundtrip,sockeye_decode}.rs`
   - the targets.
 - `fuzz/fuzz.dict` - libFuzzer dictionary: `.env` grammar tokens, the
@@ -69,6 +72,8 @@ then commit the updated `fuzz/Cargo.lock`. The `rust-fuzz.yml` build job runs
 lock (otherwise a `cargo fuzz build` silently rewrites the lock at build time,
 breaking reproducibility).
 
+</details>
+
 ## Running
 
 Requires a nightly toolchain (cargo-fuzz sets the sanitizer flags plus the
@@ -91,6 +96,9 @@ values ONLY under that cfg (declared in `crates/envrypt/Cargo.toml`'s
 `check-cfg`). No default, normal, or `--all-features` build ever sets it, so
 shipped behavior and `cargo test` behavior are byte-for-byte the production
 code, and both guards exist in production - the fuzz build only shrinks them.
+
+<details>
+<summary><b>The two shrunk constants</b> - MAX_EXPAND_ITERATIONS and DEFAULT_MAX_EXPAND_OUTPUT_BYTES, plus the retired sh stub and the raw-wire decrypt entry</summary>
 
 1. **`MAX_EXPAND_ITERATIONS` (10 000 → 256).** A self-reinserting expansion's
    ADDITIVE member - a value that re-inserts the match verbatim - grows the
@@ -120,6 +128,8 @@ The `ecies_decrypt` target also uses a `cfg(fuzzing)`
 `crypto::fuzz_decrypt_wire_payload` entry to drive decryption over raw
 post-base64 bytes (the public `decrypt` entry only reaches byte sequences a
 lenient base64 decoder can produce).
+
+</details>
 
 ## Per-target flags (in `fuzz/run.sh`)
 
@@ -177,6 +187,9 @@ perf claim without a benchmark or disassembly is a guess.
 
 Do NOT, per prior measurement:
 
+<details>
+<summary><b>The six standing do-nots and the adopted settings</b> - SIMD, arenas, interning, rayon, allocator swaps, micro-restructuring; release/bench profiles</summary>
+
 1. **Hand-rolled SIMD** for scanning quotes/whitespace/identifiers - lost 1.5–8%
    vs `memchr` in four separate experiments; `.env` tokens are short.
 2. **Arena/bump allocation for parse output** - wrong scale (a `.env` yields tens
@@ -201,3 +214,5 @@ Adopted, with the receipts in git history:
   symbolized criterion profiles (`crates/envrypt/benches/`).
 - **Deferred pending an A/B:** caching the parsed `SecretKey` in ring entries
   for per-value decrypt (`decrypt_bulk_100` is the canary bench).
+
+</details>

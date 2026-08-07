@@ -52,14 +52,14 @@ jobs:
       attestations: write # build provenance for the .crate
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 (2025-11-13)
         with:
           persist-credentials: false
       - name: Rust toolchain (fleet nightly pin, from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
         with:
           toolchain: nightly
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 (2026-03-12)
 
       # STAGE: verify the crate builds from its packaged sources (no upload).
       - name: Verify (cargo publish --dry-run --locked)
@@ -69,7 +69,7 @@ jobs:
       - name: crates.io auth (OIDC Trusted Publishing)
         id: auth
         if: ${{ inputs.publish == true }}
-        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1 (2026-06-16)
       - name: Publish to crates.io
         if: ${{ inputs.publish == true }}
         env:
@@ -82,7 +82,7 @@ jobs:
         run: cargo package -p envrypt --locked
       - name: Attest build provenance (.crate)
         if: ${{ inputs.publish == true }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2 (2025-06-11)
         with:
           subject-path: target/package/envrypt-*.crate
       - name: Tag + GitHub release
@@ -106,7 +106,8 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "release ${tag} already exists; leaving it"
           else
-            gh release create "$tag" --verify-tag --title "$tag" \
-              --notes "envrypt ${version} — https://crates.io/crates/envrypt/${version}" \
-              "$crate" checksums.txt
+            gh release create "$tag" --verify-tag --draft --title "$tag" \
+              --notes "envrypt ${version} — https://crates.io/crates/envrypt/${version}"
+            gh release upload "$tag" "$crate" checksums.txt
+            gh release edit "$tag" --draft=false
           fi
