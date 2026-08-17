@@ -15,5 +15,8 @@
   "build": {
     "from": "crates-registry",
     "type": "rust"
+  },
+  "capabilities": {
+    "cargo": ["."]
   }
 }
