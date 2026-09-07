@@ -1,5 +1,8 @@
 # envrypt
 
+[![Follow @SocketSecurity](https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/badge-follow-x.svg)](https://twitter.com/SocketSecurity)
+[![Follow @socket.dev on Bluesky](https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/badge-follow-bluesky.svg)](https://bsky.app/profile/socket.dev)
+
 envrypt is a Rust library for encrypted `.env` files: it reads a `.env`, resolves
 the private key from the process environment or `.env.keys`, decrypts
 `encrypted:` values, and returns a map - or injects into `std::env` on request.
@@ -8,6 +11,17 @@ The private key stays out of your repo, your shell history, and your terminal
 transcripts: the embedding app calls the library, and the key lives in an env var
 or an approved secret broker. Local development with Sockeye injects the key
 into one Touch-ID-approved child; CI injects it through its secret store.
+
+## Install
+
+Build the library from this checkout:
+
+```sh
+pnpm install
+pnpm run build
+```
+
+## Usage
 
 ```rust
 // Reads ".env", resolves the key (env var → .env.keys),
@@ -30,7 +44,13 @@ onto another variable fails to decrypt), and Argon2id for passphrase mode. Spec:
 ([`docs/envrypt/crypto-formats.md`](docs/envrypt/crypto-formats.md)), so existing
 encrypted files keep decrypting.
 
-## Repo layout
+## Development
+
+```sh
+pnpm test
+```
+
+### Repo layout
 
 - `crates/envrypt` - the library crate (see its [README](crates/envrypt/README.md)
   and `examples/`).
@@ -41,7 +61,7 @@ encrypted files keep decrypting.
   read formats), `test-partition.md` (test map), `fuzzing.md`.
 - `fuzz/` - libFuzzer targets and corpora (`docs/envrypt/fuzzing.md`).
 
-## Compatibility
+### Compatibility
 
 - **envrypt writes v3 and reads v3 + legacy v1.** Any `encrypted:` / `locked:` v1
   value in the supported wire format still decrypts under envrypt **given the
@@ -56,3 +76,11 @@ encrypted files keep decrypting.
 ## License
 
 MIT - see [`LICENSE`](LICENSE).
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-light.svg">
+    <img width="320" height="91" alt="Socket" src="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-light.svg">
+  </picture>
+</div>
