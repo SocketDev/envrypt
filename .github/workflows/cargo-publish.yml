@@ -1,21 +1,20 @@
-# cargo-publish — publish the envrypt crate to crates.io via Trusted Publishing.
-#
-# INTERIM (self-contained) form: envrypt is not yet fully fleet-onboarded (no
-# scripts/fleet engine), so this inlines the verify → publish → tag → release
-# flow instead of calling `node scripts/fleet/cargo-publish.mts`. Once envrypt
-# carries the fleet publish tier, this collapses to the engine call (the fleet
-# template/presets/.github/workflows/cargo-publish.yml).
-#
-# Default flow: manual dispatch, DRY-RUN unless `publish: true`. Publishes via
-# crates.io Trusted Publishing (OIDC — id-token: write, NO long-lived token) with
-# GitHub build provenance on the .crate. crates.io publishes are PERMANENT (a
-# version can only be yanked, never overwritten), so the real run is gated behind
-# the `cargo-publish` CI environment (required reviewers).
-#
-# One-time setup: on crates.io/crates/envrypt/settings add a Trusted Publisher for
-# repo SocketDev/envrypt, workflow cargo-publish.yml, environment cargo-publish.
-
 name: 📦 cargo publish
+
+# PRESET — seeded once from template/presets/ (onboarding or first cascade),
+# then repo-owned: customize what + how THIS crate publishes. The cargo analog
+# of npm-publish.yml.
+#
+# Default flow: manual dispatch, DRY-RUN unless `publish: true`; publishes the
+# workspace's publishable crate via the fleet cargo-publish engine using
+# crates.io Trusted Publishing (OIDC — id-token: write, no long-lived token)
+# with build provenance. The `cargo-publish` CI environment gates the real,
+# PERMANENT publish (crates.io is yank-only) — configure required reviewers +
+# the crates.io trusted-publisher (repo + this workflow + environment) on it.
+#
+# ORDER RULE: the engine publishes FIRST, then gates the git tag + immutable
+# GH release on the version being resolvable in the crates.io index
+# (requireRegistryLive) — the release is the FINAL marker and never precedes
+# the registry publish.
 
 on:
   workflow_dispatch:
@@ -28,86 +27,65 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: cargo-publish-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
-
-defaults:
-  run:
-    shell: bash
-
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
-
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # Human-approval + OIDC gate on the real, PERMANENT publish; a dry-run is ungated.
+    # Same-named CI environment: the human-approval + OIDC gate for the
+    # PERMANENT publish; a dry-run is ungated.
     environment: ${{ inputs.publish == true && 'cargo-publish' || '' }}
     permissions:
-      contents: write # create the vX.Y.Z tag + the GitHub release
+      contents: write # cargo-publish.mts tags + cuts the GitHub release
       id-token: write # crates.io Trusted Publishing (OIDC) + provenance
       attestations: write # build provenance for the .crate
+    env:
+      SOCKET_API_KEY: ${{ secrets.SOCKET_API_TOKEN_FOR_CLI_AND_SFW }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 (2025-11-13)
+      - name: Setup + install
+        uses: ./.github/actions/fleet/setup-and-install
+      # Fleet composites, not the third-party actions they replace: a raw
+      # `uses:` here would force dtolnay/rust-toolchain and Swatinem/rust-cache
+      # onto the Actions allowlist of every repo seeded from this preset, and a
+      # strict-allowlist repo plan-fails with 0 jobs when one is missing.
+      - name: Rust toolchain
+        uses: ./.github/actions/fleet/setup-rust-toolchain
         with:
-          persist-credentials: false
-      - name: Rust toolchain (fleet nightly pin, from rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master (2026-07-16)
+          channel: nightly
+      - name: Rust cache
+        uses: ./.github/actions/fleet/setup-rust-cache
         with:
-          toolchain: nightly
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2 (2026-03-12)
-
-      # STAGE: verify the crate builds from its packaged sources (no upload).
-      - name: Verify (cargo publish --dry-run --locked)
-        run: cargo publish -p envrypt --dry-run --locked
-
-      # APPROVE (real run only, gated by the cargo-publish environment):
+          prefix-key: cargo-publish
+          workspaces: .
+      # The fleet's own OIDC exchange, not rust-lang/crates-io-auth-action.
+      # Same protocol, no third-party action in the publish path, and nothing
+      # to re-pin when upstream retags: that action's floating `v1` tag was
+      # deleted out from under our pin.
       - name: crates.io auth (OIDC Trusted Publishing)
         id: auth
         if: ${{ inputs.publish == true }}
-        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1 (2026-06-16)
-      - name: Publish to crates.io
-        if: ${{ inputs.publish == true }}
+        uses: ./.github/actions/fleet/crates-io-auth
+      - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish -p envrypt --locked
-
-      # RELEASE: tag + GitHub release with the .crate + provenance.
-      - name: Package the .crate for the release + attestation
-        if: ${{ inputs.publish == true }}
-        run: cargo package -p envrypt --locked
+          GH_TOKEN: ${{ github.token }}
+        # The rustup cargo goes AHEAD of the SFW shim for the publish leg:
+        # the shim's proxy interposes the crates.io publish PUT (uploads are
+        # outside its registry-read bypass), and cargo then fails TLS
+        # verification with curl error 60. Reads (index, downloads) already
+        # happened in earlier steps under the shim; the upload is outbound
+        # publish traffic with an OIDC token — no supply-chain read surface.
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          node scripts/fleet/cargo-publish.mts ${{ inputs.publish == true && '--direct' || '--staged --dry-run' }}
+      # A composite action cannot declare a `post` hook, so the revoke is an
+      # explicit step. `always()` on purpose: a failed publish still minted a
+      # token, and leaving it live until it expires is the worse outcome.
+      - name: Revoke the crates.io token
+        if: ${{ always() && steps.auth.outputs.token != '' }}
+        env:
+          CRATES_IO_TOKEN: ${{ steps.auth.outputs.token }}
+        run: node scripts/fleet/registry-infra/crates-io-trusted-token.mts --revoke
       - name: Attest build provenance (.crate)
         if: ${{ inputs.publish == true }}
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2 (2025-06-11)
         with:
-          subject-path: target/package/envrypt-*.crate
-      - name: Tag + GitHub release
-        if: ${{ inputs.publish == true }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          version="$(cargo metadata --format-version 1 --no-deps \
-            | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="envrypt"))')"
-          tag="v${version}"
-          crate="target/package/envrypt-${version}.crate"
-          sha256="$(shasum -a 256 "$crate" | awk '{print $1}')"
-          printf 'sha256: %s  %s\n' "$sha256" "$(basename "$crate")" > checksums.txt
-          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            echo "tag ${tag} already exists"
-          else
-            git tag "$tag"
-            git push origin "$tag"
-          fi
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "release ${tag} already exists; leaving it"
-          else
-            gh release create "$tag" --verify-tag --draft --title "$tag" \
-              --notes "envrypt ${version} — https://crates.io/crates/envrypt/${version}"
-            gh release upload "$tag" "$crate" checksums.txt
-            gh release edit "$tag" --draft=false
-          fi
+          subject-path: target/package/*.crate
