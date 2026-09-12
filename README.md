@@ -79,8 +79,8 @@ MIT - see [`LICENSE`](LICENSE).
 
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-light.svg">
-    <img width="320" height="91" alt="Socket" src="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-light.svg">
+      <img width="320" height="91" alt="Socket" src="https://raw.githubusercontent.com/SocketDev/envrypt/HEAD/assets/fleet/socket-combomark-light.svg">
   </picture>
 </div>
