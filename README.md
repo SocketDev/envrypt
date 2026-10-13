@@ -44,6 +44,14 @@ onto another variable fails to decrypt), and Argon2id for passphrase mode. Spec:
 ([`docs/envrypt/crypto-formats.md`](docs/envrypt/crypto-formats.md)), so existing
 encrypted files keep decrypting.
 
+### Documentation
+
+- [Rust API](docs/api.md)
+- [Crypto formats](docs/envrypt/crypto-formats.md)
+- [Crypto v3 format](docs/envrypt/crypto-v3.md)
+- [Secret resolvers](docs/envrypt/secret-resolvers.md)
+- [Sockeye integration](docs/envrypt/sockeye.md)
+
 ## Development
 
 ```sh
